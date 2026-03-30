@@ -4,6 +4,7 @@ defaults:
   font: NanumSquareRound.ttf
   font_size: 52
   font_color: white
+  audio_provider: edge-tts
   bgm_volume: 0.15
   image_source: placeholder
   upload_schedule: "10:00"

@@ -78,7 +78,10 @@ class _EdgeTTSProvider(_AudioProvider):
         async def _write() -> None:
             await communicate.save(str(output_path))
 
-        asyncio.run(_write())
+        try:
+            asyncio.run(_write())
+        except Exception as exc:  # pragma: no cover - network/runtime failure fallback
+            raise _AudioProviderError("edge-tts generation failed") from exc
         return output_path
 
 
@@ -123,7 +126,12 @@ def generate_audio_segments(
                 voice=voice,
                 channel_config=channel_config,
             )
-        except _AudioProviderError:
+        except Exception as exc:
+            if isinstance(audio_provider, _FallbackAudioProvider):
+                raise
+            if provider is not None and not isinstance(provider, str):
+                raise
+
             fallback_output_path = audio_dir / f"segment_{index:02d}.wav"
             if output_path != fallback_output_path and output_path.exists():
                 output_path.unlink(missing_ok=True)

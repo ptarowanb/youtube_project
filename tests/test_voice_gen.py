@@ -1,6 +1,9 @@
 from pathlib import Path
 
+import pytest
+
 from src.models import ScriptSegment
+import src.voice_gen as voice_gen_module
 from src.voice_gen import generate_audio_segments
 
 
@@ -60,3 +63,25 @@ def test_generate_audio_segments_uses_provider_in_order(tmp_path: Path):
     assert call_order == ["1", "2"]
     assert [path.name for path in paths] == ["segment_01.mp3", "segment_02.mp3"]
     assert all(path.exists() for path in paths)
+
+
+def test_generate_audio_segments_falls_back_when_edge_provider_raises(tmp_path: Path, monkeypatch):
+    channel_config = {
+        "voice": "ko-KR-SunHiNeural",
+        "audio_provider": "edge-tts",
+    }
+
+    def fake_generate(self, segment, output_path: Path, *, voice: str | None = None, channel_config=None):
+        raise RuntimeError("edge-tts generation failed")
+
+    monkeypatch.setattr(voice_gen_module._EdgeTTSProvider, "generate", fake_generate)
+
+    paths = generate_audio_segments(
+        segments=_build_segments(),
+        channel_config=channel_config,
+        output_dir=tmp_path,
+    )
+
+    assert [path.name for path in paths] == ["segment_01.wav", "segment_02.wav"]
+    assert paths[0].read_bytes()[:4] == b"RIFF"
+    assert paths[1].read_bytes()[:4] == b"RIFF"

@@ -17,6 +17,7 @@ def test_load_channel_config_merges_defaults():
 
     assert config["display_name"] == "지식채널"
     assert config["enabled"] is True
+    assert config["audio_provider"] == "edge-tts"
     assert config["font"] == "NanumSquareRound.ttf"
     assert config["format"] == "longform"
 
