@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import wave
 from pathlib import Path
 
 
@@ -41,17 +42,17 @@ class _FallbackAudioProvider(_AudioProvider):
         channel_config: dict | None = None,
     ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            from pydub import AudioSegment
+        duration_ms = int(getattr(segment, "duration_hint", 1_000)) * 1_000
+        sample_rate = 16_000
+        frame_count = max(int(sample_rate * (max(250, duration_ms) / 1000)), 1)
 
-            duration_ms = int(getattr(segment, "duration_hint", 1_000)) * 1_000
-            silence = AudioSegment.silent(duration=max(250, duration_ms))
-            silence.export(output_path, format="mp3")
-            return output_path
-        except Exception:
-            payload = f"audio fallback: {segment.id if hasattr(segment, 'id') else 'n/a'}\n"
-            output_path.write_text(payload, encoding="utf-8")
-            return output_path
+        with wave.open(str(output_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(b"\x00\x00" * frame_count)
+
+        return output_path
 
 
 class _EdgeTTSProvider(_AudioProvider):
@@ -84,20 +85,20 @@ class _EdgeTTSProvider(_AudioProvider):
 def _resolve_provider(
     provider=None,
     channel_config: dict | None = None,
-) -> _AudioProvider:
+) -> tuple[_AudioProvider, str]:
     if provider is None:
         if channel_config and channel_config.get("audio_provider") == "edge-tts":
-            return _EdgeTTSProvider()
-        return _FallbackAudioProvider()
+            return _EdgeTTSProvider(), ".mp3"
+        return _FallbackAudioProvider(), ".wav"
     if isinstance(provider, str):
         if provider in {"edge", "edge-tts"}:
-            return _EdgeTTSProvider()
+            return _EdgeTTSProvider(), ".mp3"
         if provider == "fallback":
-            return _FallbackAudioProvider()
+            return _FallbackAudioProvider(), ".wav"
         raise ValueError("provider must be 'edge', 'fallback', or an AudioProvider instance")
     if not hasattr(provider, "generate"):
         raise TypeError("provider must expose a generate(segment, output_path, ...)")
-    return provider
+    return provider, ".mp3"
 
 
 def generate_audio_segments(
@@ -109,12 +110,12 @@ def generate_audio_segments(
     output_dir.mkdir(parents=True, exist_ok=True)
     audio_dir = output_dir / "audio"
     audio_paths: list[Path] = []
-    audio_provider = _resolve_provider(provider=provider, channel_config=channel_config)
+    audio_provider, output_suffix = _resolve_provider(provider=provider, channel_config=channel_config)
     fallback_provider = _FallbackAudioProvider()
     voice = channel_config.get("voice", _DEFAULT_VOICE) if isinstance(channel_config, dict) else _DEFAULT_VOICE
 
     for index, segment in enumerate(segments, start=1):
-        output_path = audio_dir / f"segment_{index:02d}.mp3"
+        output_path = audio_dir / f"segment_{index:02d}{output_suffix}"
         try:
             generated = audio_provider.generate(
                 segment,
@@ -123,9 +124,12 @@ def generate_audio_segments(
                 channel_config=channel_config,
             )
         except _AudioProviderError:
+            fallback_output_path = audio_dir / f"segment_{index:02d}.wav"
+            if output_path != fallback_output_path and output_path.exists():
+                output_path.unlink(missing_ok=True)
             generated = fallback_provider.generate(
                 segment,
-                output_path,
+                fallback_output_path,
                 voice=voice,
                 channel_config=channel_config,
             )

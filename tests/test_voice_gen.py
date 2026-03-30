@@ -21,7 +21,7 @@ def _build_segments() -> list[ScriptSegment]:
     ]
 
 
-def test_generate_audio_segments_creates_ordered_mp3s_in_audio_dir(tmp_path: Path):
+def test_generate_audio_segments_creates_valid_fallback_audio_in_order(tmp_path: Path):
     channel_config = {"voice": "en-US-AriaNeural"}
 
     paths = generate_audio_segments(
@@ -31,10 +31,12 @@ def test_generate_audio_segments_creates_ordered_mp3s_in_audio_dir(tmp_path: Pat
     )
 
     assert len(paths) == 2
-    assert paths[0] == tmp_path / "audio" / "segment_01.mp3"
-    assert paths[1] == tmp_path / "audio" / "segment_02.mp3"
+    assert paths[0] == tmp_path / "audio" / "segment_01.wav"
+    assert paths[1] == tmp_path / "audio" / "segment_02.wav"
     assert [path.exists() for path in paths] == [True, True]
     assert [path.is_file() for path in paths] == [True, True]
+    assert paths[0].read_bytes()[:4] == b"RIFF"
+    assert paths[1].read_bytes()[:4] == b"RIFF"
 
 
 def test_generate_audio_segments_uses_provider_in_order(tmp_path: Path):

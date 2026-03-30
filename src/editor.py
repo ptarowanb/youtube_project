@@ -40,6 +40,24 @@ def _build_clip_plan(
     return plan
 
 
+def _load_moviepy_bindings() -> dict[str, Any]:
+    from moviepy import (
+        AudioFileClip,
+        ColorClip,
+        CompositeVideoClip,
+        TextClip,
+        concatenate_videoclips,
+    )
+
+    return {
+        "AudioFileClip": AudioFileClip,
+        "ColorClip": ColorClip,
+        "CompositeVideoClip": CompositeVideoClip,
+        "TextClip": TextClip,
+        "concatenate_videoclips": concatenate_videoclips,
+    }
+
+
 def _write_dry_run_payload(
     output_path: Path,
     script_payload: ScriptPayload,
@@ -68,10 +86,7 @@ def _write_dry_run_payload(
 
 
 def _render_placeholder(output_path: Path, script_payload: ScriptPayload) -> Path:
-    output_path.write_bytes(
-        f"placeholder video for: {script_payload.title}".encode("utf-8")
-    )
-    return output_path
+    raise RuntimeError(f"Video rendering failed for '{script_payload.title}'.")
 
 
 def _compose_with_moviepy(
@@ -81,48 +96,50 @@ def _compose_with_moviepy(
     output_path: Path,
 ) -> Path:
     try:
-        from moviepy.editor import AudioFileClip, ColorClip, CompositeVideoClip, TextClip  # type: ignore
+        bindings = _load_moviepy_bindings()
     except Exception:  # pragma: no cover - optional dependency fallback path
-        _render_placeholder(output_path, script_payload)
-        return output_path
+        raise RuntimeError("MoviePy is unavailable or could not be imported.")
+
+    AudioFileClip = bindings["AudioFileClip"]
+    ColorClip = bindings["ColorClip"]
+    CompositeVideoClip = bindings["CompositeVideoClip"]
+    TextClip = bindings["TextClip"]
+    concatenate_videoclips = bindings["concatenate_videoclips"]
 
     resolution = tuple(channel_config.get("resolution", [1920, 1080]))
     width, height = resolution
 
     clips = []
-    for idx, segment in enumerate(script_payload.segments):
-        duration_hint = max(1, int(segment.duration_hint))
-        bg = ColorClip(size=(width, height), color=(30, 30, 30), duration=duration_hint)
+    audio_clips = []
+
+    for segment, audio_path in zip(script_payload.segments, audio_paths):
+        audio_clip = AudioFileClip(str(audio_path))
+        audio_clips.append(audio_clip)
+        clip_duration = max(1, int(segment.duration_hint), int(getattr(audio_clip, "duration", 0) or 0))
+        bg = ColorClip(size=(width, height), color=(30, 30, 30)).with_duration(clip_duration)
         txt = (
             TextClip(
-                txt=segment.text,
-                fontsize=channel_config.get("font_size", 42),
+                text=segment.text,
+                font_size=channel_config.get("font_size", 42),
                 color=channel_config.get("font_color", "white"),
                 size=(width, height),
                 method="caption",
             )
-            .set_position("center")
-            .set_duration(duration_hint)
+            .with_position("center")
+            .with_duration(clip_duration)
         )
-        clips.append(CompositeVideoClip([bg, txt]).set_start(sum(
-            max(1, int(s.duration_hint))
-            for s in script_payload.segments[:idx]
-        )))
+        clip = CompositeVideoClip([bg, txt]).with_duration(clip_duration).with_audio(audio_clip)
+        clips.append(clip)
 
-    video = CompositeVideoClip(clips).set_duration(
-        sum(max(1, int(segment.duration_hint)) for segment in script_payload.segments)
-    )
-
-    if audio_paths:
-        audio_clip = AudioFileClip(str(audio_paths[0]))
-        video = video.set_audio(audio_clip)
-
+    video = concatenate_videoclips(clips, method="compose")
     video.write_videofile(str(output_path), fps=24, codec="libx264", audio_codec="aac")
     video.close()
     for clip in clips:
-        clip.close()
-    if audio_paths:
-        audio_clip.close()  # type: ignore[name-defined]
+        close = getattr(clip, "close", None)
+        if callable(close):
+            close()
+    for audio_clip in audio_clips:
+        audio_clip.close()
     return output_path
 
 
@@ -143,7 +160,4 @@ def compose_video(
     if not audio_paths:
         raise ValueError("At least one audio path is required to compose a video.")
 
-    try:
-        return _compose_with_moviepy(script_payload, audio_paths, channel_config, output_path)
-    except Exception:
-        return _render_placeholder(output_path, script_payload)
+    return _compose_with_moviepy(script_payload, audio_paths, channel_config, output_path)
