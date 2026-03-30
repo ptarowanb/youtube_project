@@ -1,12 +1,11 @@
 from pathlib import Path
 
-import pytest
-
 from src.asset_manager import fetch_assets
 from src.job_tracker import JobTracker
 from src.scheduler import build_scheduler
 from src.subtitle_gen import extract_timestamps
 from src.utils.logger import get_logger
+import pytest
 
 
 def test_future_modules_expose_stable_interfaces(tmp_path: Path):
@@ -23,13 +22,18 @@ def test_future_modules_expose_stable_interfaces(tmp_path: Path):
     ("callable_obj", "args"),
     [
         (extract_timestamps, (Path("audio.mp3"),)),
-        (fetch_assets, ([], {}, Path("assets"))),
         (build_scheduler, tuple()),
     ],
 )
 def test_unfinished_modules_fail_with_clear_not_implemented(callable_obj, args):
     with pytest.raises(NotImplementedError):
         callable_obj(*args)
+
+
+def test_asset_manager_returns_asset_paths(tmp_path: Path):
+    paths = fetch_assets([], {"resolution": [1280, 720]}, tmp_path)
+
+    assert paths == []
 
 
 def test_job_tracker_methods_fail_with_not_implemented(tmp_path: Path):

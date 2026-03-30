@@ -3,6 +3,7 @@ google-api-python-client
 google-auth-oauthlib
 moviepy
 openai
+Pillow
 pydub
 pytest
 python-dotenv

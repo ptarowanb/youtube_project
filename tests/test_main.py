@@ -94,14 +94,20 @@ def test_run_pipeline_calls_stages_in_order(tmp_path: Path, monkeypatch):
         call_order.append("save")
         return output_dir / "script.json"
 
+    def fake_fetch_assets(segments, channel_config: dict, output_dir: Path):
+        assert segments == payload.segments
+        call_order.append("assets")
+        return [output_dir / "assets" / "segment_01.png"]
+
     def fake_generate_audio_segments(segments, channel_config: dict, output_dir: Path, provider=None):
         assert segments == payload.segments
         call_order.append("audio")
         return [output_dir / "audio" / "segment_01.mp3"]
 
-    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False):
+    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False, asset_paths=None):
         assert script_payload is payload
         assert audio_paths == [output_dir / "audio" / "segment_01.mp3"]
+        assert asset_paths == [output_dir / "assets" / "segment_01.png"]
         assert dry_run is False
         call_order.append("video")
         return fake_video_path
@@ -109,6 +115,7 @@ def test_run_pipeline_calls_stages_in_order(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(main_module, "load_channel_config", fake_load_channel_config)
     monkeypatch.setattr(main_module, "generate_script", fake_generate_script)
     monkeypatch.setattr(main_module, "save_script_payload", fake_save_script_payload)
+    monkeypatch.setattr(main_module, "fetch_assets", fake_fetch_assets)
     monkeypatch.setattr(main_module, "generate_audio_segments", fake_generate_audio_segments)
     monkeypatch.setattr(main_module, "compose_video", fake_compose_video)
 
@@ -119,7 +126,7 @@ def test_run_pipeline_calls_stages_in_order(tmp_path: Path, monkeypatch):
     )
 
     assert result == fake_video_path
-    assert call_order == ["load:knowledge", "script", "save", "audio", "video"]
+    assert call_order == ["load:knowledge", "script", "save", "assets", "audio", "video"]
     assert (tmp_path / "knowledge").exists()
 
 
@@ -143,20 +150,27 @@ def test_run_script_file_pipeline_uses_script_metadata_channel(tmp_path: Path, m
         call_order.append("save")
         return output_dir / "script.json"
 
+    def fake_fetch_assets(segments, channel_config: dict, output_dir: Path):
+        assert segments == payload.segments
+        call_order.append("assets")
+        return [output_dir / "assets" / "segment_01.png"]
+
     def fake_generate_audio_segments(segments, channel_config: dict, output_dir: Path, provider=None):
         assert segments == payload.segments
         call_order.append("audio")
         return [output_dir / "audio" / "segment_01.wav"]
 
-    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False):
+    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False, asset_paths=None):
         assert script_payload is payload
         assert audio_paths == [output_dir / "audio" / "segment_01.wav"]
+        assert asset_paths == [output_dir / "assets" / "segment_01.png"]
         call_order.append("video")
         return fake_video_path
 
     monkeypatch.setattr(main_module, "parse_manual_script_file", fake_parse_manual_script_file)
     monkeypatch.setattr(main_module, "load_channel_config", fake_load_channel_config)
     monkeypatch.setattr(main_module, "save_script_payload", fake_save_script_payload)
+    monkeypatch.setattr(main_module, "fetch_assets", fake_fetch_assets)
     monkeypatch.setattr(main_module, "generate_audio_segments", fake_generate_audio_segments)
     monkeypatch.setattr(main_module, "compose_video", fake_compose_video)
 
@@ -166,7 +180,7 @@ def test_run_script_file_pipeline_uses_script_metadata_channel(tmp_path: Path, m
     )
 
     assert result == fake_video_path
-    assert call_order == ["parse", "load:mystery", "save", "audio", "video"]
+    assert call_order == ["parse", "load:mystery", "save", "assets", "audio", "video"]
 
 
 def test_run_script_file_pipeline_uploads_with_cli_overrides(tmp_path: Path, monkeypatch):
@@ -188,12 +202,17 @@ def test_run_script_file_pipeline_uploads_with_cli_overrides(tmp_path: Path, mon
         call_order.append("save")
         return output_dir / "script.json"
 
+    def fake_fetch_assets(segments, channel_config: dict, output_dir: Path):
+        call_order.append("assets")
+        return [output_dir / "assets" / "segment_01.png"]
+
     def fake_generate_audio_segments(segments, channel_config: dict, output_dir: Path, provider=None):
         call_order.append("audio")
         return [output_dir / "audio" / "segment_01.wav"]
 
-    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False):
+    def fake_compose_video(script_payload, audio_paths, channel_config: dict, output_dir: Path, dry_run=False, asset_paths=None):
         call_order.append("video")
+        assert asset_paths == [output_dir / "assets" / "segment_01.png"]
         return fake_video_path
 
     def fake_parse_publish_at(value: str):
@@ -211,6 +230,7 @@ def test_run_script_file_pipeline_uploads_with_cli_overrides(tmp_path: Path, mon
     monkeypatch.setattr(main_module, "parse_manual_script_file", fake_parse_manual_script_file)
     monkeypatch.setattr(main_module, "load_channel_config", fake_load_channel_config)
     monkeypatch.setattr(main_module, "save_script_payload", fake_save_script_payload)
+    monkeypatch.setattr(main_module, "fetch_assets", fake_fetch_assets)
     monkeypatch.setattr(main_module, "generate_audio_segments", fake_generate_audio_segments)
     monkeypatch.setattr(main_module, "compose_video", fake_compose_video)
     monkeypatch.setattr(main_module, "parse_publish_at", fake_parse_publish_at)
@@ -229,6 +249,7 @@ def test_run_script_file_pipeline_uploads_with_cli_overrides(tmp_path: Path, mon
         "parse",
         "load:knowledge",
         "save",
+        "assets",
         "audio",
         "video",
         "publish_at:2026-04-01 10:00",

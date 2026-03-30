@@ -10,6 +10,7 @@ if __package__ in {None, ""}:  # Support `python src/main.py`
 
 from src.config_loader import get_active_channels, load_channel_config
 from src.manual_script_parser import parse_manual_script_file
+from src.asset_manager import fetch_assets
 from src.scripter import generate_script, save_script_payload
 from src.uploader import parse_publish_at, upload_video
 
@@ -107,6 +108,12 @@ def run_pipeline(
     )
     save_script_payload(script_payload, run_dir)
 
+    asset_paths = fetch_assets(
+        script_payload.segments,
+        channel_config,
+        run_dir,
+    )
+
     audio_stage = _require_stage(generate_audio_segments, "voice generation")
     audio_paths = audio_stage(
         script_payload.segments,
@@ -120,6 +127,7 @@ def run_pipeline(
         audio_paths,
         channel_config,
         run_dir,
+        asset_paths=asset_paths,
     )
     _maybe_upload_video(
         video_path,
@@ -146,6 +154,12 @@ def run_script_file_pipeline(
 
     save_script_payload(script_payload, run_dir)
 
+    asset_paths = fetch_assets(
+        script_payload.segments,
+        channel_config,
+        run_dir,
+    )
+
     audio_stage = _require_stage(generate_audio_segments, "voice generation")
     audio_paths = audio_stage(
         script_payload.segments,
@@ -159,6 +173,7 @@ def run_script_file_pipeline(
         audio_paths,
         channel_config,
         run_dir,
+        asset_paths=asset_paths,
     )
     _maybe_upload_video(
         video_path,

@@ -5,6 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from src.models import ScriptPayload
+from src.utils.fonts import DEFAULT_FONT_SEARCH_DIRS, resolve_font_path
+
+
+_FONT_SEARCH_DIRS = list(DEFAULT_FONT_SEARCH_DIRS)
+
+
+def _resolve_font_path(channel_config: dict[str, Any]) -> str | None:
+    return resolve_font_path(channel_config, search_dirs=_FONT_SEARCH_DIRS)
 
 
 def _validate_segment_audio_count(
@@ -45,6 +53,7 @@ def _load_moviepy_bindings() -> dict[str, Any]:
         AudioFileClip,
         ColorClip,
         CompositeVideoClip,
+        ImageClip,
         TextClip,
         concatenate_videoclips,
     )
@@ -53,6 +62,7 @@ def _load_moviepy_bindings() -> dict[str, Any]:
         "AudioFileClip": AudioFileClip,
         "ColorClip": ColorClip,
         "CompositeVideoClip": CompositeVideoClip,
+        "ImageClip": ImageClip,
         "TextClip": TextClip,
         "concatenate_videoclips": concatenate_videoclips,
     }
@@ -94,6 +104,7 @@ def _compose_with_moviepy(
     audio_paths: list[Path],
     channel_config: dict[str, Any],
     output_path: Path,
+    asset_paths: list[Path] | None = None,
 ) -> Path:
     try:
         bindings = _load_moviepy_bindings()
@@ -103,23 +114,33 @@ def _compose_with_moviepy(
     AudioFileClip = bindings["AudioFileClip"]
     ColorClip = bindings["ColorClip"]
     CompositeVideoClip = bindings["CompositeVideoClip"]
+    ImageClip = bindings.get("ImageClip")
     TextClip = bindings["TextClip"]
     concatenate_videoclips = bindings["concatenate_videoclips"]
 
     resolution = tuple(channel_config.get("resolution", [1920, 1080]))
     width, height = resolution
+    font_path = _resolve_font_path(channel_config)
 
     clips = []
     audio_clips = []
 
-    for segment, audio_path in zip(script_payload.segments, audio_paths):
+    for index, (segment, audio_path) in enumerate(zip(script_payload.segments, audio_paths)):
         audio_clip = AudioFileClip(str(audio_path))
         audio_clips.append(audio_clip)
         clip_duration = max(1, int(segment.duration_hint), int(getattr(audio_clip, "duration", 0) or 0))
-        bg = ColorClip(size=(width, height), color=(30, 30, 30)).with_duration(clip_duration)
+        asset_path = None
+        if asset_paths and index < len(asset_paths):
+            asset_path = asset_paths[index]
+
+        if asset_path and ImageClip and Path(asset_path).exists():
+            bg = ImageClip(str(asset_path)).with_duration(clip_duration)
+        else:
+            bg = ColorClip(size=(width, height), color=(30, 30, 30)).with_duration(clip_duration)
         txt = (
             TextClip(
                 text=segment.text,
+                font=font_path,
                 font_size=channel_config.get("font_size", 42),
                 color=channel_config.get("font_color", "white"),
                 size=(width, height),
@@ -149,6 +170,7 @@ def compose_video(
     channel_config: dict[str, Any],
     output_dir: Path,
     dry_run: bool = False,
+    asset_paths: list[Path] | None = None,
 ) -> Path:
     output_dir = Path(output_dir)
     _validate_segment_audio_count(script_payload, audio_paths)
@@ -160,4 +182,10 @@ def compose_video(
     if not audio_paths:
         raise ValueError("At least one audio path is required to compose a video.")
 
-    return _compose_with_moviepy(script_payload, audio_paths, channel_config, output_path)
+    return _compose_with_moviepy(
+        script_payload,
+        audio_paths,
+        channel_config,
+        output_path,
+        asset_paths=asset_paths,
+    )
