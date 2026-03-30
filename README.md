@@ -22,7 +22,14 @@
 ```powershell
 python src/main.py --list-channels
 python src/main.py --topic "ChatGPT 활용법" --channel knowledge
+python src/main.py --script-file docs/examples/sample-script.md
 ```
+
+## 수동 원고 입력
+
+- 표준 입력 폼: `docs/manual-script-form.md`
+- 예시 파일: `docs/examples/sample-script.md`
+- 원고를 수동으로 준비할 때는 `--script-file` 경로를 사용한다.
 
 ## 현재 단계
 

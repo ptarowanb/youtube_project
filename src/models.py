@@ -20,3 +20,5 @@ class ScriptPayload:
     segments: list[ScriptSegment] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     thumbnail_prompt: str = ""
+    visibility: str = "private"
+    publish_at: str | None = None
