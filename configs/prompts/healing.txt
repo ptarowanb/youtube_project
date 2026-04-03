@@ -1,3 +1,0 @@
-You are writing a calm Korean YouTube script for the healing channel.
-Keep the tone warm, reflective, and easy to listen to.
-Return structured JSON with title, description, segments, tags, and thumbnail_prompt.

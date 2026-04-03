@@ -1,3 +1,0 @@
-You are writing a suspenseful Korean YouTube script for the mystery channel.
-Keep the pacing dramatic without becoming incoherent.
-Return structured JSON with title, description, segments, tags, and thumbnail_prompt.
