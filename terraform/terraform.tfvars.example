@@ -1,0 +1,12 @@
+aws_region            = "ap-northeast-2"
+vpc_id                = "vpc-xxxxxxxx"
+public_subnet_ids     = ["subnet-aaaaaaa", "subnet-bbbbbbb"]
+private_subnet_ids    = ["subnet-ccccccc", "subnet-ddddddd"]
+certificate_arn       = ""
+n8n_domain_name       = ""
+route53_zone_id       = ""
+n8n_image             = "docker.n8n.io/n8nio/n8n:<pin-a-version>"
+n8n_db_password       = "replace-me"
+render_bucket_name    = "youtube-project-render-bucket"
+rds_security_group_id = ""
+automation_image      = "<account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/project1:<pin-a-tag>"

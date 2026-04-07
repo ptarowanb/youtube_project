@@ -35,3 +35,13 @@ python src/main.py --script-file docs/examples/sample-script.md
 
 - Phase 1 구현 진행 중
 - OpenAI, edge-tts, ffmpeg가 없더라도 개발용 fallback 경로를 유지하는 방향으로 구현한다
+
+## automation 배포
+
+- `automation`은 별도 Python/ffmpeg 컨테이너로 배포한다.
+- GitHub Actions가 `main` push 시 Docker 이미지를 빌드해 ECR `project1`에 push한다.
+- 이어서 ECS cluster `n8n`의 service `automation`을 새 task revision으로 롤링 업데이트한다.
+- 이후 `automation` 서비스의 task revision 이동은 GitHub Actions가 맡고, Terraform은 기본 인프라와 초기 bootstrap만 담당한다.
+- GitHub repository secrets에는 최소한 아래 두 개가 필요하다.
+  - `AWS_ACCESS_KEY_ID`
+  - `AWS_SECRET_ACCESS_KEY`
