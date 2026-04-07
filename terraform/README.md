@@ -61,11 +61,9 @@ You can use the `automation_ecr_repository_url` output after the first apply to 
 
 Terraform creates these Secrets Manager entries during apply:
 
-- `n8n/db-password`
-- `n8n/encryption-key`
-- `automation/shared-token`
+- `project1/runtime`
 
-Only `n8n_db_password` needs to be provided as input. The n8n encryption key and the internal `automation` shared token are generated automatically.
+Only `n8n_db_password` needs to be provided as input. Terraform writes a single JSON secret containing the n8n database connection values, the generated n8n encryption key, and the internal `automation` shared token.
 
 AI/API credentials such as OpenAI, image generation, and TTS credentials are expected to live in `n8n` credentials storage rather than Terraform-managed ECS secrets by default.
 

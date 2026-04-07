@@ -58,41 +58,45 @@ resource "aws_ecs_task_definition" "n8n" {
         {
           name  = "DB_TYPE"
           value = "postgresdb"
-        },
-        {
-          name  = "DB_POSTGRESDB_HOST"
-          value = var.n8n_db_host
-        },
-        {
-          name  = "DB_POSTGRESDB_PORT"
-          value = "5432"
-        },
-        {
-          name  = "DB_POSTGRESDB_DATABASE"
-          value = var.n8n_db_name
-        },
-        {
-          name  = "DB_POSTGRESDB_USER"
-          value = var.n8n_db_user
-        },
-        {
-          name  = "DB_POSTGRESDB_SCHEMA"
-          value = var.n8n_db_schema
         }
       ]
 
       secrets = [
         {
           name      = "DB_POSTGRESDB_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.n8n_db_password.arn
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_password::"
         },
         {
           name      = "N8N_ENCRYPTION_KEY"
-          valueFrom = aws_secretsmanager_secret.n8n_encryption_key.arn
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_encryption_key::"
         },
         {
           name      = "AUTOMATION_SHARED_TOKEN"
-          valueFrom = aws_secretsmanager_secret.automation_shared_token.arn
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:automation_shared_token::"
+        },
+        {
+          name      = "DB_POSTGRESDB_HOST"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_host::"
+        },
+        {
+          name      = "DB_POSTGRESDB_PORT"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_port::"
+        },
+        {
+          name      = "DB_POSTGRESDB_DATABASE"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_name::"
+        },
+        {
+          name      = "DB_POSTGRESDB_USER"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_user::"
+        },
+        {
+          name      = "DB_POSTGRESDB_SCHEMA"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_schema::"
+        },
+        {
+          name      = "DB_POSTGRESDB_SSL_ENABLED"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:n8n_db_ssl_enabled::"
         }
       ]
 
@@ -201,7 +205,7 @@ resource "aws_ecs_task_definition" "automation" {
       secrets = [
         {
           name      = "AUTOMATION_SHARED_TOKEN"
-          valueFrom = aws_secretsmanager_secret.automation_shared_token.arn
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:automation_shared_token::"
         }
       ]
 

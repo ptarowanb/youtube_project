@@ -13,9 +13,7 @@ data "aws_iam_policy_document" "ecs_task_execution_secrets" {
   statement {
     actions = ["secretsmanager:GetSecretValue"]
     resources = [
-      aws_secretsmanager_secret.n8n_db_password.arn,
-      aws_secretsmanager_secret.n8n_encryption_key.arn,
-      aws_secretsmanager_secret.automation_shared_token.arn,
+      aws_secretsmanager_secret.runtime.arn,
     ]
   }
 }
