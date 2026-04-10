@@ -47,6 +47,8 @@ Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in at least these
 - `public_subnet_ids`
 - `private_subnet_ids`
 - `render_bucket_name`
+- `telegram_review_chat_id`
+- `typecast_api_key`
 - `n8n_db_password`
 - `n8n_image` with a pinned tag or digest
 - `automation_image` with a pinned tag or digest
@@ -63,7 +65,7 @@ Terraform creates these Secrets Manager entries during apply:
 
 - `project1/runtime`
 
-Only `n8n_db_password` needs to be provided as input. Terraform writes a single JSON secret containing the n8n database connection values, the generated n8n encryption key, and the internal `automation` shared token.
+Terraform writes a single JSON secret containing the n8n database connection values, the generated n8n encryption key, the internal `automation` shared token, and the Typecast API key.
 
 AI/API credentials such as OpenAI, image generation, and TTS credentials are expected to live in `n8n` credentials storage rather than Terraform-managed ECS secrets by default.
 

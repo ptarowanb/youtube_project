@@ -1,7 +1,9 @@
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from src.automation_server import create_server
 
@@ -23,7 +25,15 @@ def _request(method, url, payload=None, headers=None):
 
 class TestAutomationServer:
     def setup_method(self):
-        self.server = create_server("127.0.0.1", 0, "test-token")
+        self.storage = FakeStorage()
+        self.renderer = FakeRenderer()
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            "test-token",
+            storage=self.storage,
+            renderer=self.renderer,
+        )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base_url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -60,6 +70,7 @@ class TestAutomationServer:
             f"{self.base_url}/render-jobs",
             payload={
                 "job_id": "job-1",
+                "output_prefix": "jobs/job-1/output",
                 "image_keys": ["jobs/job-1/images/01.png"],
                 "audio_keys": ["jobs/job-1/audio/01.mp3"],
             },
@@ -72,15 +83,19 @@ class TestAutomationServer:
             "status": "queued",
         }
 
-        get_status, get_payload = _request(
-            "GET", f"{self.base_url}/render-jobs/job-1"
+        get_status, get_payload = wait_for_job_status(
+            self.base_url,
+            "job-1",
+            target_status="done",
         )
 
         assert get_status == 200
         assert get_payload["job_id"] == "job-1"
-        assert get_payload["status"] == "queued"
+        assert get_payload["status"] == "done"
         assert get_payload["image_keys"] == ["jobs/job-1/images/01.png"]
         assert get_payload["audio_keys"] == ["jobs/job-1/audio/01.mp3"]
+        assert get_payload["output_key"] == "jobs/job-1/output/final.mp4"
+        assert get_payload["output_url"] == "https://example.test/jobs/job-1/output/final.mp4"
 
     def test_missing_job_returns_not_found(self):
         try:
@@ -90,3 +105,84 @@ class TestAutomationServer:
             assert json.loads(error.read().decode("utf-8")) == {"error": "not_found"}
         else:
             raise AssertionError("expected not found response")
+
+    def test_render_failure_updates_job_state(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+        self.renderer = FailingRenderer()
+        self.server = create_server(
+            "127.0.0.1",
+            0,
+            "test-token",
+            storage=self.storage,
+            renderer=self.renderer,
+        )
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base_url = f"http://127.0.0.1:{self.server.server_address[1]}"
+
+        create_status, _ = _request(
+            "POST",
+            f"{self.base_url}/render-jobs",
+            payload={"job_id": "job-fail", "output_prefix": "jobs/job-fail/output"},
+            headers={"X-Automation-Token": "test-token"},
+        )
+
+        assert create_status == 202
+
+        _, payload = wait_for_job_status(
+            self.base_url,
+            "job-fail",
+            target_status="failed",
+        )
+        assert payload["error"] == "render failed"
+
+
+class FakeStorage:
+    def __init__(self):
+        self.uploads = {}
+
+    def download_file(self, key, destination):
+        Path(destination).parent.mkdir(parents=True, exist_ok=True)
+        Path(destination).write_bytes(f"downloaded:{key}".encode("utf-8"))
+
+    def upload_file(self, source, key, content_type=None):
+        self.uploads[key] = {
+            "content_type": content_type,
+            "bytes": Path(source).read_bytes(),
+        }
+
+    def presign_get(self, key, expires_in=3600):
+        return f"https://example.test/{key}"
+
+
+class FakeRenderer:
+    def render(self, job, storage, workdir):
+        time.sleep(0.05)
+        output_key = job["output_prefix"].rstrip("/") + "/final.mp4"
+        output_path = Path(workdir) / "final.mp4"
+        output_path.write_bytes(b"video-bytes")
+        storage.upload_file(output_path, output_key, content_type="video/mp4")
+        return {
+            "output_key": output_key,
+            "output_url": storage.presign_get(output_key),
+        }
+
+
+class FailingRenderer:
+    def render(self, job, storage, workdir):
+        raise RuntimeError("render failed")
+
+
+def wait_for_job_status(base_url, job_id, target_status, timeout=3):
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        status, payload = _request("GET", f"{base_url}/render-jobs/{job_id}")
+        if payload.get("status") == target_status:
+            return status, payload
+        time.sleep(0.05)
+
+    raise AssertionError(f"job {job_id} did not reach {target_status}: {payload}")

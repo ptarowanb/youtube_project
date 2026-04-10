@@ -1,0 +1,910 @@
+{
+  "name": "AI To Render To YouTube",
+  "meta": {
+    "instanceId": "youtube-project-e2e-template"
+  },
+  "nodes": [
+    {
+      "id": "0b23f14a-9b77-4e62-a11c-10bba1c10001",
+      "name": "Workflow Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        224,
+        -176
+      ],
+      "parameters": {
+        "color": 7,
+        "width": 760,
+        "height": 380,
+        "content": "## End-to-end template\n\nFlow:\n1. Receive topic and upload metadata\n2. Generate scenario/script with Google Gemini\n3. Generate narration with Typecast\n4. Upload narration/subtitles to S3\n5. Generate one Gemini still and one Veo hook clip\n6. Upload generated assets to S3\n7. Call `/render-jobs`\n8. Poll render status\n9. Upload final mp4 to YouTube\n\nThis template is concrete for the balanced stack, but keeps the visual section intentionally small: one still + one hook clip. Duplicate or loop those nodes if you want more scenes."
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "fe56b45b-cf08-4af5-a193-54d38aa10002",
+      "name": "Provider Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1040,
+        -176
+      ],
+      "parameters": {
+        "color": 5,
+        "width": 860,
+        "height": 380,
+        "content": "## Required credentials and env\n\nCredentials to attach after import:\n- `Google Gemini` node -> `googlePalmApi`\n- `AWS S3` nodes -> `aws`\n- `YouTube Upload` -> `youTubeOAuth2Api`\n\nEnvironment variables expected by the workflow:\n- `TYPECAST_API_KEY`\n- `AUTOMATION_SHARED_TOKEN`\n- `RENDER_BUCKET_NAME`\n\nRecommended model defaults:\n- Text: `models/gemini-2.5-flash`\n- Image: `models/gemini-2.5-flash-image`\n- Video: set this to your Veo Lite-capable model ID in the input or node configuration"
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "79d17d0d-9c62-4ad4-b70e-6f986ca10003",
+      "name": "Start Pipeline",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        336,
+        192
+      ],
+      "webhookId": "ai-render-youtube-template",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-render-youtube",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "fa8141ae-d5f1-4062-a0df-2c91a4d10004",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        576,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $json.body ?? $json;\nconst now = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);\nconst rand = Math.random().toString(36).slice(2, 8);\nconst jobId = input.job_id || ('yt_' + now + '_' + rand);\n\nreturn [{\n  json: {\n    job_id: jobId,\n    topic: input.topic || 'Untitled topic',\n    style: input.style || 'mysterious',\n    duration_seconds: input.duration_seconds || 30,\n    voice_id: input.voice_id || 'tc_60e5426de8b95f1d3000d7b5',\n    visual_style: input.visual_style || 'cinematic stills',\n    hook_clip_count: input.hook_clip_count || 1,\n    render_bucket_name: input.render_bucket_name || $env.RENDER_BUCKET_NAME || 'replace-me-bucket',\n    gemini_text_model: input.gemini_text_model || 'models/gemini-2.5-flash',\n    gemini_image_model: input.gemini_image_model || 'models/gemini-2.5-flash-image',\n    veo_model: input.veo_model || 'models/veo-3.1-generate-preview',\n    youtube_title: input.youtube_title || input.topic || jobId,\n    youtube_description: input.youtube_description || '',\n    youtube_tags: input.youtube_tags || [],\n    youtube_privacy_status: input.youtube_privacy_status || 'private',\n    bgm_key: input.bgm_key || null\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "9ba7fc11-b12b-4586-a4ef-495353710005",
+      "name": "Gemini Scenario Planner",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        832,
+        192
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$json.gemini_text_model}}"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "=Create a YouTube Shorts production plan for this topic.\nReturn JSON only with this exact shape:\n{\n  \"scenario_title\": string,\n  \"youtube_title\": string,\n  \"youtube_description\": string,\n  \"youtube_tags\": string[],\n  \"narration_script\": string,\n  \"hook_video_prompts\": string[],\n  \"still_image_prompts\": string[]\n}\n\nConstraints:\n- Topic: {{$('Normalize Input').first().json.topic}}\n- Style: {{$('Normalize Input').first().json.style}}\n- Duration seconds: {{$('Normalize Input').first().json.duration_seconds}}\n- Visual style: {{$('Normalize Input').first().json.visual_style}}\n- Keep hook_video_prompts length at {{$('Normalize Input').first().json.hook_clip_count}}\n- Keep still_image_prompts length at 1\n- Title should be short and catchy for Korean Shorts\n- Description should be 2-3 short lines\n- Tags should include shorts and topic-related tags"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {
+          "systemMessage": "You are planning short-form vertical videos. Output valid JSON only.",
+          "temperature": 0.7,
+          "topP": 0.9,
+          "maxOutputTokens": 1500,
+          "thinkingBudget": 0
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "credential-id",
+          "name": "Google Gemini Credential"
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "12b6b52c-9880-4653-b7eb-c6ee7b310006",
+      "name": "Parse Scenario",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1104,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const response = $json;\nconst candidate = response.candidates?.[0];\nconst parts = candidate?.content?.parts || [];\nconst textPart = parts.find((part) => typeof part.text === 'string');\nif (!textPart?.text) {\n  throw new Error('Gemini scenario response did not include text output');\n}\nconst raw = textPart.text.trim().replace(/^```json\\s*/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();\nconst parsed = JSON.parse(raw);\nconst input = $('Normalize Input').first().json;\nconst hookVideoPrompts = Array.isArray(parsed.hook_video_prompts) ? parsed.hook_video_prompts : [];\nconst stillImagePrompts = Array.isArray(parsed.still_image_prompts) ? parsed.still_image_prompts : [];\n\nreturn [{\n  json: {\n    ...input,\n    scenario_title: parsed.scenario_title || input.topic,\n    youtube_title: parsed.youtube_title || input.youtube_title,\n    youtube_description: parsed.youtube_description || input.youtube_description,\n    youtube_tags: parsed.youtube_tags || input.youtube_tags,\n    narration_script: parsed.narration_script || input.topic,\n    hook_video_prompt: hookVideoPrompts[0] || (input.topic + ' vertical cinematic hook shot'),\n    still_image_prompt: stillImagePrompts[0] || (input.topic + ' cinematic still frame')\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "ae619bf1-6022-4fd6-aa85-5ca4d9f10007",
+      "name": "Typecast Narration",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1376,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.typecast.ai/v1/text-to-speech",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "={{$env.TYPECAST_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({\n  voice_id: $('Parse Scenario').first().json.voice_id,\n  text: $('Parse Scenario').first().json.narration_script,\n  model: 'ssfm-v30',\n  language: 'kor',\n  prompt: {\n    emotion_type: 'smart'\n  },\n  output: {\n    volume: 100,\n    audio_pitch: 0,\n    audio_tempo: 1,\n    audio_format: 'mp3'\n  }\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "narration"
+            }
+          }
+        }
+      },
+      "typeVersion": 4.4
+    },
+    {
+      "id": "c3778664-076e-4378-95ee-43ca6d010008",
+      "name": "Upload Narration to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        1648,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
+        "fileName": "narration.mp3",
+        "binaryData": true,
+        "binaryPropertyName": "narration",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/audio'}}"
+        }
+      },
+      "credentials": {
+        "aws": {
+          "id": "credential-id",
+          "name": "AWS account"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "ca8b292b-6e50-4198-939c-f8f72fc10009",
+      "name": "Build Subtitle File",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1920,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const script = $('Parse Scenario').first().json.narration_script || '';\nconst chunks = script.split(/(?<=[.!?])\\s+/).filter(Boolean);\nconst totalDuration = Number($('Parse Scenario').first().json.duration_seconds || 30);\nconst secondsPerChunk = Math.max(2, Math.floor(totalDuration / Math.max(chunks.length, 1)));\n\nconst toSrtTime = (seconds) => {\n  const date = new Date(seconds * 1000).toISOString().slice(11, 23);\n  return date.replace('.', ',');\n};\n\nconst lines = [];\nfor (let index = 0; index < chunks.length; index++) {\n  const start = index * secondsPerChunk;\n  const end = Math.min(totalDuration, start + secondsPerChunk);\n  lines.push(String(index + 1));\n  lines.push(`${toSrtTime(start)} --> ${toSrtTime(end)}`);\n  lines.push(chunks[index]);\n  lines.push('');\n}\n\nreturn [{\n  json: {\n    subtitle_content: lines.join('\\n')\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "59e2b61c-5951-4d93-b2e8-728ff2d10010",
+      "name": "Upload Subtitle to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        2192,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
+        "fileName": "captions.srt",
+        "binaryData": false,
+        "fileContent": "={{$json.subtitle_content}}",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/subtitles'}}"
+        }
+      },
+      "credentials": {
+        "aws": {
+          "id": "credential-id",
+          "name": "AWS account"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "08eb9fd3-0e9a-4f42-8690-c76a5c910011",
+      "name": "Gemini Still Image",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "resource": "image",
+        "operation": "generate",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$('Parse Scenario').first().json.gemini_image_model}}"
+        },
+        "prompt": "={{$('Parse Scenario').first().json.still_image_prompt}}",
+        "options": {
+          "binaryPropertyOutput": "image"
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "credential-id",
+          "name": "Google Gemini Credential"
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "1e72a330-2304-499e-b924-f1c77ba60013",
+      "name": "Upload Image to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        2736,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
+        "fileName": "01.png",
+        "binaryData": true,
+        "binaryPropertyName": "image",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/images'}}"
+        }
+      },
+      "credentials": {
+        "aws": {
+          "id": "credential-id",
+          "name": "AWS account"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "a4242836-e99b-4833-9f7f-4c1ef7e60014",
+      "name": "Veo Lite Hook Clip",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        3008,
+        192
+      ],
+      "parameters": {
+        "resource": "video",
+        "operation": "generate",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$('Parse Scenario').first().json.veo_model}}"
+        },
+        "prompt": "={{$('Parse Scenario').first().json.hook_video_prompt}}",
+        "returnAs": "video",
+          "options": {
+            "sampleCount": 1,
+            "durationSeconds": 4,
+            "aspectRatio": "9:16",
+            "binaryPropertyOutput": "video"
+          }
+        },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "credential-id",
+          "name": "Google Gemini Credential"
+        }
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "5ec58d7c-f2ad-42cb-9a16-cf1bd7590015",
+      "name": "Upload Hook Video to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        3280,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
+        "fileName": "01.mp4",
+        "binaryData": true,
+        "binaryPropertyName": "video",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/videos'}}"
+        }
+      },
+      "credentials": {
+        "aws": {
+          "id": "credential-id",
+          "name": "AWS account"
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "bb72fd32-e7ac-4bf4-a8c4-b804905e0017",
+      "name": "Prepare Render Manifest",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        3552,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const scenario = $('Parse Scenario').first().json;\nconst base = 'jobs/' + scenario.job_id;\nreturn [{\n  json: {\n    ...scenario,\n    audio_keys: [base + '/audio/narration.mp3'],\n    image_keys: [base + '/images/01.png'],\n    video_keys: [base + '/videos/01.mp4'],\n    subtitle_key: base + '/subtitles/captions.srt',\n    output_prefix: base + '/output/'\n  }\n}];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "7b11c7fe-7204-4ece-a62f-b594e6940019",
+      "name": "Start Render Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        3824,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://automation.n8n.local:8080/render-jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Automation-Token",
+              "value": "={{$env.AUTOMATION_SHARED_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({\n  job_id: $json.job_id,\n  video_keys: $json.video_keys,\n  image_keys: $json.image_keys,\n  audio_keys: $json.audio_keys,\n  subtitle_key: $json.subtitle_key,\n  bgm_key: $json.bgm_key,\n  output_prefix: $json.output_prefix\n}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "typeVersion": 4.4
+    },
+    {
+      "id": "9337068c-e592-43e6-bf77-8ca8e7230020",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        4096,
+        64
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ accepted: true, job_id: $('Prepare Render Manifest').first().json.job_id, status: $json.status || 'queued' }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "typeVersion": 1.5
+    },
+    {
+      "id": "5151c629-4fe6-4759-b8c7-60f53f1b0021",
+      "name": "Render Context",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        4096,
+        224
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  status: $json.status,\n  youtube_title: $('Prepare Render Manifest').first().json.youtube_title,\n  youtube_description: $('Prepare Render Manifest').first().json.youtube_description,\n  youtube_tags: $('Prepare Render Manifest').first().json.youtube_tags,\n  youtube_privacy_status: $('Prepare Render Manifest').first().json.youtube_privacy_status\n}) }}",
+        "options": {}
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "41717db2-9b88-4bc2-96ba-a32a45ca0022",
+      "name": "Wait 30 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        4336,
+        224
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "2c0130b2-b4af-4a4b-bc5b-8c93a2bd0012",
+      "name": "Check Render Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        4576,
+        224
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://automation.n8n.local:8080/render-jobs/{{$json.job_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Automation-Token",
+              "value": "={{$env.AUTOMATION_SHARED_TOKEN}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "typeVersion": 4.4
+    },
+    {
+      "id": "621a4839-bc0d-4c73-b228-3831ad50ca3c",
+      "name": "Status Context",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        4816,
+        224
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  status: $json.status,\n  error: $json.error || '',\n  video_url: $json.video_url || $json.output_url || '',\n  youtube_title: $('Prepare Render Manifest').first().json.youtube_title,\n  youtube_description: $('Prepare Render Manifest').first().json.youtube_description,\n  youtube_tags: $('Prepare Render Manifest').first().json.youtube_tags,\n  youtube_privacy_status: $('Prepare Render Manifest').first().json.youtube_privacy_status\n}) }}",
+        "options": {}
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "88f2bfc3-a997-4838-a4e6-911c60d377ec",
+      "name": "Render Done?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        5056,
+        224
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "07d94d9f-1a98-4f20-91d0-c9d7d84f0016",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "done"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "89d9a5d9-d3c7-48c1-98cf-cc8987ba9391",
+      "name": "Render Failed?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        5296,
+        352
+      ],
+      "parameters": {
+        "options": {},
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "9d71de20-7a13-47ff-b41a-f1448fa10018",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "failed"
+            }
+          ]
+        }
+      },
+      "typeVersion": 2.2
+    },
+    {
+      "id": "3acacedb-bafa-4fbf-8d3e-f198b19b9308",
+      "name": "Download Rendered Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        5296,
+        96
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.video_url}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "typeVersion": 4.4
+    },
+    {
+      "id": "4ec85126-51da-4f3b-a04f-16552fdcb244",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        5536,
+        96
+      ],
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{$json.youtube_title}}",
+        "regionCode": "KR",
+        "categoryId": "22",
+        "binaryProperty": "data",
+        "options": {
+          "description": "={{$json.youtube_description}}",
+          "tags": "={{Array.isArray($json.youtube_tags) ? $json.youtube_tags.join(',') : ($json.youtube_tags || '')}}",
+          "privacyStatus": "={{$json.youtube_privacy_status}}",
+          "embeddable": true,
+          "notifySubscribers": false,
+          "publicStatsViewable": true
+        }
+      },
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "credential-id",
+          "name": "youTubeOAuth2Api Credential"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "2ea5b79c-2e49-4d7e-933c-8b1a58d2415c",
+      "name": "Upload Result",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        5776,
+        96
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  youtube_upload_id: $json.uploadId || '',\n  youtube_video_id: $json.id || '',\n  youtube_url: $json.id ? ('https://www.youtube.com/watch?v=' + $json.id) : ''\n}) }}",
+        "options": {}
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "7e0fa1ed-2cd6-48a6-bf04-d67d4d7fe842",
+      "name": "Throw Render Error",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        5536,
+        416
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "throw new Error($json.error || ('Render job ' + $json.job_id + ' failed'));"
+      },
+      "typeVersion": 2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Gemini Scenario Planner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Scenario Planner": {
+      "main": [
+        [
+          {
+            "node": "Parse Scenario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Scenario": {
+      "main": [
+        [
+          {
+            "node": "Typecast Narration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Typecast Narration": {
+      "main": [
+        [
+          {
+            "node": "Upload Narration to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Narration to S3": {
+      "main": [
+        [
+          {
+            "node": "Build Subtitle File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Subtitle File": {
+      "main": [
+        [
+          {
+            "node": "Upload Subtitle to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Subtitle to S3": {
+      "main": [
+        [
+          {
+            "node": "Gemini Still Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Still Image": {
+      "main": [
+        [
+          {
+            "node": "Upload Image to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Image to S3": {
+      "main": [
+        [
+          {
+            "node": "Veo Lite Hook Clip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Lite Hook Clip": {
+      "main": [
+        [
+          {
+            "node": "Upload Hook Video to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Hook Video to S3": {
+      "main": [
+        [
+          {
+            "node": "Prepare Render Manifest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Render Manifest": {
+      "main": [
+        [
+          {
+            "node": "Start Render Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Render Job": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Render Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Context": {
+      "main": [
+        [
+          {
+            "node": "Wait 30 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Check Render Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Render Status": {
+      "main": [
+        [
+          {
+            "node": "Status Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Context": {
+      "main": [
+        [
+          {
+            "node": "Render Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Done?": {
+      "main": [
+        [
+          {
+            "node": "Download Rendered Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Render Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Failed?": {
+      "main": [
+        [
+          {
+            "node": "Throw Render Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 30 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Rendered Video": {
+      "main": [
+        [
+          {
+            "node": "YouTube Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YouTube Upload": {
+      "main": [
+        [
+          {
+            "node": "Upload Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "4f5f3e1d-8b5f-42cd-9d56-8f1760e9a999"
+}

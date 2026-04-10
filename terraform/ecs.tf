@@ -56,8 +56,24 @@ resource "aws_ecs_task_definition" "n8n" {
           value = "1"
         },
         {
+          name  = "N8N_BLOCK_ENV_ACCESS_IN_NODE"
+          value = "false"
+        },
+        {
           name  = "DB_TYPE"
           value = "postgresdb"
+        },
+        {
+          name  = "DB_POSTGRESDB_SSL_REJECT_UNAUTHORIZED"
+          value = "false"
+        },
+        {
+          name  = "RENDER_BUCKET_NAME"
+          value = aws_s3_bucket.render_outputs.bucket
+        },
+        {
+          name  = "TELEGRAM_REVIEW_CHAT_ID"
+          value = var.telegram_review_chat_id
         }
       ]
 
@@ -73,6 +89,10 @@ resource "aws_ecs_task_definition" "n8n" {
         {
           name      = "AUTOMATION_SHARED_TOKEN"
           valueFrom = "${aws_secretsmanager_secret.runtime.arn}:automation_shared_token::"
+        },
+        {
+          name      = "TYPECAST_API_KEY"
+          valueFrom = "${aws_secretsmanager_secret.runtime.arn}:typecast_api_key::"
         },
         {
           name      = "DB_POSTGRESDB_HOST"

@@ -89,6 +89,17 @@ variable "render_bucket_name" {
   type        = string
 }
 
+variable "telegram_review_chat_id" {
+  description = "Telegram chat ID used for approval notifications."
+  type        = string
+}
+
+variable "typecast_api_key" {
+  description = "Typecast API key used by n8n workflows."
+  type        = string
+  sensitive   = true
+}
+
 variable "rds_security_group_id" {
   description = "Optional existing RDS security group ID to allow inbound access from the n8n service."
   type        = string

@@ -194,7 +194,7 @@ variable "rds_security_group_id" {
 ```hcl
 certificate_arn       = ""
 n8n_domain_name       = ""
-render_bucket_name    = "youtube-project-render-bucket"
+render_bucket_name    = "render-bucket-m7"
 rds_security_group_id = ""
 ```
 
