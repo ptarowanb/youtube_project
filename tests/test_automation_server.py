@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from src.automation_server import create_server
+from src.automation_server import FfmpegRenderer, create_server
 
 
 def _request(method, url, payload=None, headers=None):
@@ -186,3 +186,34 @@ def wait_for_job_status(base_url, job_id, target_status, timeout=3):
         time.sleep(0.05)
 
     raise AssertionError(f"job {job_id} did not reach {target_status}: {payload}")
+
+
+def test_compose_final_loops_bgm_until_video_ends(tmp_path):
+    renderer = FfmpegRenderer()
+    commands = []
+
+    def capture_run(command):
+        commands.append(command)
+
+    renderer._run = capture_run
+
+    renderer._compose_final(
+        visuals_path=tmp_path / "visuals.mp4",
+        output_path=tmp_path / "final.mp4",
+        audio_path=tmp_path / "narration.mp3",
+        bgm_path=tmp_path / "bgm.mp3",
+    )
+
+    command = commands[0]
+
+    bgm_flag_index = command.index("-stream_loop")
+    assert command[bgm_flag_index : bgm_flag_index + 4] == [
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(tmp_path / "bgm.mp3"),
+    ]
+    assert any(
+        "amix=inputs=2:duration=longest:dropout_transition=2[aout]" in part
+        for part in command
+    )

@@ -63,6 +63,7 @@ def test_build_production_input_supports_style_profiles():
     assert "style_profile: styleProfile" in js_code
     assert "style: selected.style" in js_code
     assert "visual_style: selected.visual_style" in js_code
+    assert "veo_model: 'models/veo-3.1-lite-generate-preview'" in js_code
 
 
 def test_persist_telegram_message_id_maps_style_profile():

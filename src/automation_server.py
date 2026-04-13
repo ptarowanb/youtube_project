@@ -296,7 +296,7 @@ class FfmpegRenderer:
             next_input_index += 1
 
         if bgm_path:
-            command.extend(["-i", str(bgm_path)])
+            command.extend(["-stream_loop", "-1", "-i", str(bgm_path)])
             bgm_input_index = next_input_index
             next_input_index += 1
 
@@ -306,7 +306,7 @@ class FfmpegRenderer:
                 [
                     f"[{audio_input_index}:a]volume=1.0[narration]",
                     f"[{bgm_input_index}:a]volume=0.12[bgm]",
-                    "[narration][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+                    "[narration][bgm]amix=inputs=2:duration=longest:dropout_transition=2[aout]",
                 ]
             )
 
