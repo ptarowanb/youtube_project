@@ -1,89 +1,83 @@
 {
-  "name": "YouTube Research Approval Production Template",
-  "meta": {
-    "instanceId": "youtube-project-single-import-template"
-  },
   "nodes": [
     {
-      "id": "yt-001",
-      "name": "Scheduled Daily Trigger",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "position": [
-        240,
-        220
-      ],
       "parameters": {
         "rule": {
           "interval": [
             {
-              "triggerAtHour": 9,
-              "triggerAtMinute": 0
+              "triggerAtHour": 9
             }
           ]
         }
       },
+      "id": "d2018197-68f6-4ef7-a9df-2dcd071264e1",
+      "name": "Scheduled Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        57072,
+        -10112
+      ],
       "typeVersion": 1.3
     },
     {
-      "id": "yt-002",
+      "parameters": {
+        "jsCode": "const lookbackDays = 365;\nconst since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();\n\nreturn [\n  {\n    json: {\n      lookback_days: lookbackDays,\n      published_after: since\n    }\n  }\n];"
+      },
+      "id": "577e1022-42a4-435c-b921-f0d02a38b09a",
       "name": "Compute Lookback",
       "type": "n8n-nodes-base.code",
       "position": [
-        460,
-        220
+        57280,
+        -10112
       ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(); return [{ json: { published_after: since } }];"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-003",
-      "name": "Read Channels in Sheets",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        700,
-        100
-      ],
       "parameters": {
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
+          "value": "=1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=0",
-          "cachedResultName": "channels"
+          "mode": "name",
+          "value": "channels"
         },
-        "authentication": "serviceAccount",
+        "filtersUI": {
+          "values": []
+        },
         "options": {}
       },
-      "typeVersion": 4.7
+      "id": "327478f6-8bdb-48be-9f12-a933688c7fae",
+      "name": "Read Channels in Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        57520,
+        -10224
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-004",
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n  return items.filter((item) => {\n    const enabledValue = String(item.json.enabled ?? '').trim().toLowerCase();\n    const channelId = String(item.json.channel_id ?? item.json.channelId ?? '').trim();\n\n    const isEnabled =\n      enabledValue === 'true' ||\n      enabledValue === '1' ||\n      enabledValue === 'yes';\n\n    return isEnabled && Boolean(channelId);\n  });"
+      },
+      "id": "7d119da4-7e27-4d78-a796-cbe49851a685",
       "name": "Filter Enabled Channels",
       "type": "n8n-nodes-base.code",
       "position": [
-        920,
-        100
+        57744,
+        -10224
       ],
-      "parameters": {
-        "jsCode": "return items.filter((item) => { const enabled = item.json.enabled; const channelId = item.json.channel_id || item.json.channelId; const isEnabled = enabled === true || enabled === 1 || enabled === '1' || String(enabled).toLowerCase() === 'true'; return isEnabled && Boolean(channelId); });"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-005",
-      "name": "Fetch Channel Videos",
-      "type": "n8n-nodes-base.youTube",
-      "position": [
-        1140,
-        100
-      ],
       "parameters": {
         "resource": "video",
         "returnAll": true,
@@ -93,130 +87,214 @@
         },
         "options": {}
       },
+      "id": "d44d716d-1eaa-495f-aeb2-cfe92a0af85a",
+      "name": "Fetch Channel Videos",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        57968,
+        -10224
+      ],
+      "typeVersion": 1,
+      "alwaysOutputData": false,
       "credentials": {
         "youTubeOAuth2Api": {
-          "id": "credential-id",
-          "name": "YouTube OAuth2"
+          "id": "wq1U8TLyjVuGciTE",
+          "name": "YouTube account"
         }
-      },
-      "typeVersion": 1
+      }
     },
     {
-      "id": "yt-006",
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n  const getVideoId = (json) => {\n    const raw = json.id?.videoId ?? json.videoId ?? json.id ?? '';\n    return typeof raw === 'string' ? raw.trim() : '';\n  };\n\n  return items.map((item) => {\n    const videoId = getVideoId(item.json);\n\n    return {\n      json: {\n        video_id: videoId,\n        channel_id: String(item.json.channelId ?? item.json.snippet?.channelId ?? '').trim(),\n        channel_name: String(item.json.channelTitle ?? item.json.snippet?.channelTitle ?? '').trim(),\n        title: String(item.json.title ?? item.json.snippet?.title ?? '').trim(),\n        url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : '',\n        published_at: String(item.json.publishedAt ?? item.json.snippet?.publishedAt ?? '').trim(),\n        harvested_at: new Date().toISOString(),\n        status: 'new',\n        _source: 'harvested'\n      }\n    };\n  });"
+      },
+      "id": "7f956169-b4fa-4a52-90a2-b8ca3e1dd956",
       "name": "Normalize Harvested Videos",
       "type": "n8n-nodes-base.code",
       "position": [
-        1360,
-        100
+        58192,
+        -10224
       ],
-      "parameters": {
-        "jsCode": "return items.map(item => ({ json: { video_id: item.json.id, channel_id: item.json.snippet?.channelId, channel_name: item.json.snippet?.channelTitle, title: item.json.snippet?.title, url: `https://www.youtube.com/watch?v=${item.json.id}`, published_at: item.json.snippet?.publishedAt, harvested_at: new Date().toISOString(), status: 'new', _source: 'harvested' } }));"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-007",
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "source_videos",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "3821821c-1880-474e-957c-36fc3ea9a317",
       "name": "Read source_videos",
       "type": "n8n-nodes-base.googleSheets",
       "position": [
-        700,
-        360
+        57520,
+        -9968
       ],
-      "parameters": {
-        "documentId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
-        },
-        "sheetName": {
-          "__rl": true,
-          "mode": "list",
-          "value": "gid=1",
-          "cachedResultName": "source_videos"
-        },
-        "authentication": "serviceAccount",
-        "options": {}
-      },
-      "typeVersion": 4.7
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-008",
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item) => ({\n  json: {\n    ...item.json,\n    _source: 'existing'\n  }\n}));"
+      },
+      "id": "1f5e48fe-25d4-4076-a4de-4e19bb07cd3f",
       "name": "Mark Existing Videos",
       "type": "n8n-nodes-base.code",
       "position": [
-        920,
-        360
+        57744,
+        -9968
       ],
-      "parameters": {
-        "jsCode": "return items.map(item => ({ json: { ...item.json, _source: 'existing' } }));"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-009",
+      "parameters": {},
+      "id": "8c6d7aaf-79ab-40e0-9a2f-3f37ba5957a2",
       "name": "Merge Harvested and Existing Videos",
       "type": "n8n-nodes-base.merge",
       "position": [
-        1580,
-        220
+        58400,
+        -10112
       ],
-      "parameters": {},
       "typeVersion": 3.2
     },
     {
-      "id": "yt-010",
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst existing = new Set(\n  items\n    .filter((item) => item.json._source === 'existing')\n    .map((item) => String(item.json.video_id ?? '').trim())\n    .filter(Boolean)\n);\n\nconst seen = new Set();\n\nreturn items\n  .filter((item) => item.json._source === 'harvested')\n  .filter((item) => {\n    const id = String(item.json.video_id ?? '').trim();\n\n    if (!id) {\n      return false;\n    }\n\n    if (existing.has(id)) {\n      return false;\n    }\n\n    if (seen.has(id)) {\n      return false;\n    }\n\n    seen.add(id);\n    return true;\n  })\n  .map((item) => {\n    const { _source, ...json } = item.json;\n    return { json };\n  });"
+      },
+      "id": "c4e1c06e-2a3e-4100-b643-3aae74e42d2d",
       "name": "Deduplicate Against source_videos",
       "type": "n8n-nodes-base.code",
       "position": [
-        1800,
-        220
+        58624,
+        -10112
       ],
-      "parameters": {
-        "jsCode": "const existing = new Set(items.filter(item => item.json._source === 'existing').map(item => item.json.video_id).filter(Boolean)); const seen = new Set(); return items.filter(item => item.json._source === 'harvested').filter(item => { const id = item.json.video_id; if (!id || existing.has(id) || seen.has(id)) return false; seen.add(id); return true; }).map(item => { const { _source, ...json } = item.json; return { json }; });"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-011",
-      "name": "Append New Videos to source_videos",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        2020,
-        220
-      ],
       "parameters": {
         "operation": "append",
-        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
+          "value": "1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=1",
-          "cachedResultName": "source_videos"
+          "value": "source_videos",
+          "mode": "name"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
-          "value": null
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_id",
+              "displayName": "channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "harvested_at",
+              "displayName": "harvested_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "typeVersion": 4.7
+      "id": "90207ea3-d9dd-499e-b2ec-6859f3651f74",
+      "name": "Append New Videos to source_videos",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        59264,
+        -10112
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-012",
-      "name": "Gemini Idea Analyzer",
-      "type": "@n8n/n8n-nodes-langchain.googleGemini",
-      "position": [
-        2240,
-        220
-      ],
       "parameters": {
-        "resource": "text",
-        "operation": "message",
         "modelId": {
           "__rl": true,
           "mode": "id",
@@ -225,98 +303,238 @@
         "messages": {
           "values": [
             {
-              "role": "user",
-              "content": "=Analyze this source video for a safe, original Korean Shorts idea. Return JSON only with: topic, hook, angle, summary, suggested_title, suggested_description, suggested_tags. Channel: {{$json.channel_name}}. Source title: {{$json.title}}. Source URL: {{$json.url}}. Do not suggest reusing original footage."
+              "content": "=Analyze this source video for a safe, original Korean Shorts idea. Return JSON only with: topic, hook, angle, summary, suggested_title, suggested_description, suggested_tags. Write every field in natural\n  Korean for a Korean audience. suggested_tags must be Korean keywords. Channel: {{$json.channel_name}}. Source title: {{$json.title}}. Source URL: {{$json.url}}. Do not suggest reusing original footage."
             }
           ]
         },
-        "jsonOutput": true,
         "simplify": false,
+        "jsonOutput": true,
         "builtInTools": {},
         "options": {
-          "systemMessage": "Output valid JSON only.",
-          "temperature": 0.7,
+          "systemMessage": "Output valid JSON only. All output fields must be written in natural Korean. suggested_tags must be Korean.",
           "maxOutputTokens": 1000,
+          "temperature": 0.7,
           "thinkingBudget": 0
         }
       },
+      "id": "1aac4031-ffdd-4428-ba06-a2786b98265a",
+      "name": "Gemini Idea Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        59424,
+        -10112
+      ],
+      "typeVersion": 1.1,
       "credentials": {
         "googlePalmApi": {
-          "id": "credential-id",
-          "name": "Google Gemini Credential"
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
         }
-      },
-      "typeVersion": 1.1
+      }
     },
     {
-      "id": "yt-013",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const candidate = $json.candidates?.[0];\n  const parts = candidate?.content?.parts || [];\n  const textPart = parts.find((part) => typeof part.text === 'string');\n\n  if (!textPart?.text) {\n    throw new Error('Missing Gemini text output');\n  }\n\n  const raw = textPart.text\n    .trim()\n    .replace(/^```json\\s*/i, '')\n    .replace(/^```/i, '')\n    .replace(/```$/i, '')\n    .trim();\n\n  const parsed = JSON.parse(raw);\n  const source = $('Pick First Fresh Candidate').item.json;\n\n  return {\n    json: {\n      idea_id: `idea_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,\n      source_video_id: source.video_id,\n      source_video_status: 'idea_created',\n      channel_name: source.channel_name,\n      topic: parsed.topic,\n      hook: parsed.hook,\n      angle: parsed.angle,\n      summary: parsed.summary,\n      suggested_title: parsed.suggested_title,\n      suggested_description: parsed.suggested_description,\n      suggested_tags: Array.isArray(parsed.suggested_tags)\n        ? parsed.suggested_tags.join(',')\n        : (parsed.suggested_tags || ''),\n      source_url: source.url,\n      status: 'draft',\n      telegram_message_id: '',\n      approved_at: '',\n      review_action: '',\n    }\n  };"
+      },
+      "id": "601070ec-38d3-4356-b267-4389924f54be",
       "name": "Parse Idea",
       "type": "n8n-nodes-base.code",
       "position": [
-        2460,
-        220
+        59696,
+        -10112
       ],
-      "parameters": {
-        "language": "javaScript",
-        "jsCode": "const candidate = $json.candidates?.[0]; const parts = candidate?.content?.parts || []; const textPart = parts.find((part) => typeof part.text === 'string'); if (!textPart?.text) throw new Error('Missing Gemini text output'); const raw = textPart.text.trim().replace(/^```json\\s*/i, '').replace(/^```/i, '').replace(/```$/i, '').trim(); const parsed = JSON.parse(raw); const source = $('Deduplicate Against source_videos').item.json; return [{ json: { idea_id: `idea_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, source_video_id: source.video_id, channel_name: source.channel_name, topic: parsed.topic, hook: parsed.hook, angle: parsed.angle, summary: parsed.summary, suggested_title: parsed.suggested_title, suggested_description: parsed.suggested_description, suggested_tags: Array.isArray(parsed.suggested_tags) ? parsed.suggested_tags.join(',') : (parsed.suggested_tags || ''), source_url: source.url, status: 'draft', telegram_message_id: '', approved_at: '', review_action: '' } }];",
-        "mode": "runOnceForEachItem"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-014",
-      "name": "Save Draft Idea",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        2680,
-        220
-      ],
       "parameters": {
         "operation": "append",
-        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
+          "value": "1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=2",
-          "cachedResultName": "ideas"
+          "value": "ideas",
+          "mode": "name"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
-          "value": null
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idea_id",
+              "displayName": "idea_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_video_id",
+              "displayName": "source_video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hook",
+              "displayName": "hook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "angle",
+              "displayName": "angle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_title",
+              "displayName": "suggested_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_description",
+              "displayName": "suggested_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_tags",
+              "displayName": "suggested_tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_message_id",
+              "displayName": "telegram_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_action",
+              "displayName": "review_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "typeVersion": 4.7
+      "id": "dc6db564-04d0-4f9e-adb1-bc72cab12081",
+      "name": "Save Draft Idea",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        59904,
+        -10320
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-015",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": " const idea = $json;\n\nconst telegram_message = [\n  `[Idea] ${idea.idea_id || ''}`,\n  `Channel: ${idea.channel_name || ''}`,\n  `Source: ${idea.source_url || ''}`,\n  `Topic: ${idea.topic || ''}`,\n  `Hook: ${idea.hook || ''}`,\n  `Angle: ${idea.angle || ''}`,\n  `Summary: ${idea.summary || ''}`\n].join('\\n');\n\nreturn{\n    json: {\n      ...idea,\n      telegram_message\n    }\n  };"
+      },
+      "id": "e3743a0c-102d-41a7-9539-8a2fb955b11c",
       "name": "Format Telegram Approval",
       "type": "n8n-nodes-base.code",
       "position": [
-        2900,
-        220
+        59904,
+        -9904
       ],
-      "parameters": {
-        "jsCode": "const idea = $json; const telegram_message = [`[Idea] ${idea.idea_id}`, `Channel: ${idea.channel_name}`, `Source: ${idea.source_url}`, `Topic: ${idea.topic}`, `Hook: ${idea.hook}`, `Angle: ${idea.angle}`, `Summary: ${idea.summary}`].join('\\n'); return [{ json: { ...idea, telegram_message } }];",
-        "mode": "runOnceForEachItem",
-        "language": "javaScript"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-016",
-      "name": "Send Telegram Approval",
-      "type": "n8n-nodes-base.telegram",
-      "position": [
-        3120,
-        220
-      ],
-      "webhookId": "telegram-idea-approval-template",
       "parameters": {
         "chatId": "={{$env.TELEGRAM_REVIEW_CHAT_ID}}",
         "text": "={{$json.telegram_message}}",
@@ -327,21 +545,51 @@
               "row": {
                 "buttons": [
                   {
-                    "text": "Approve",
+                    "text": "미스터리 승인",
                     "additionalFields": {
-                      "callback_data": "=approve|{{$json.idea_id}}"
+                      "callback_data": "=approve|{{$json.idea_id}}|mystery"
                     }
                   },
                   {
+                    "text": "감성 승인",
+                    "additionalFields": {
+                      "callback_data": "=approve|{{$json.idea_id}}|emotional"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "뉴스형 승인",
+                    "additionalFields": {
+                      "callback_data": "=approve|{{$json.idea_id}}|news"
+                    }
+                  },
+                  {
+                    "text": "지식형 승인",
+                    "additionalFields": {
+                      "callback_data": "=approve|{{$json.idea_id}}|knowledge"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
                     "text": "Hold",
                     "additionalFields": {
-                      "callback_data": "=hold|{{$json.idea_id}}"
+                      "callback_data": "=hold|{{$json.idea_id}}|"
                     }
                   },
                   {
                     "text": "Reject",
                     "additionalFields": {
-                      "callback_data": "=reject|{{$json.idea_id}}"
+                      "callback_data": "=reject|{{$json.idea_id}}|"
                     }
                   }
                 ]
@@ -353,41 +601,37 @@
           "appendAttribution": false
         }
       },
+      "id": "872cd84f-f1f5-4164-9a3f-6ebf974a7360",
+      "name": "Send Telegram Approval",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        60160,
+        -9904
+      ],
+      "webhookId": "telegram-idea-approval-template",
+      "typeVersion": 1.2,
       "credentials": {
         "telegramApi": {
-          "id": "credential-id",
-          "name": "Telegram Bot Credential"
+          "id": "ngv7sx0xlEfHPe5p",
+          "name": "Telegram account"
         }
-      },
-      "typeVersion": 1.2
+      }
     },
     {
-      "id": "yt-017",
-      "name": "Persist Telegram Message Id",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        3340,
-        220
-      ],
       "parameters": {
         "operation": "appendOrUpdate",
-        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
+          "value": "1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=2",
-          "cachedResultName": "ideas"
+          "value": "ideas",
+          "mode": "name"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
-          "matchingColumns": [
-            "idea_id"
-          ],
+          "mappingMode": "defineBelow",
           "value": {
             "idea_id": "={{$('Format Telegram Approval').item.json.idea_id}}",
             "source_video_id": "={{$('Format Telegram Approval').item.json.source_video_id}}",
@@ -396,153 +640,569 @@
             "hook": "={{$('Format Telegram Approval').item.json.hook}}",
             "angle": "={{$('Format Telegram Approval').item.json.angle}}",
             "summary": "={{$('Format Telegram Approval').item.json.summary}}",
-              "suggested_title": "={{$('Format Telegram Approval').item.json.suggested_title}}",
-              "suggested_description": "={{$('Format Telegram Approval').item.json.suggested_description}}",
-              "suggested_tags": "={{$('Format Telegram Approval').item.json.suggested_tags}}",
-              "style_profile": "={{$('Format Telegram Approval').item.json.style_profile}}",
-              "source_url": "={{$('Format Telegram Approval').item.json.source_url}}",
-              "status": "={{$('Format Telegram Approval').item.json.status}}",
-              "telegram_message_id": "={{$json.message_id || $json.result?.message_id || ''}}",
+            "suggested_title": "={{$('Format Telegram Approval').item.json.suggested_title}}",
+            "suggested_description": "={{$('Format Telegram Approval').item.json.suggested_description}}",
+            "suggested_tags": "={{$('Format Telegram Approval').item.json.suggested_tags}}",
+            "source_url": "={{$('Format Telegram Approval').item.json.source_url}}",
+            "status": "={{$('Format Telegram Approval').item.json.status}}",
+            "telegram_message_id": "={{$json.message_id || $json.result?.message_id || ''}}",
             "approved_at": "={{$('Format Telegram Approval').item.json.approved_at}}",
-            "review_action": "={{$('Format Telegram Approval').item.json.review_action}}"
-          }
+            "review_action": "={{$('Format Telegram Approval').item.json.review_action}}",
+            "style_profile": "={{$('Format Telegram Approval').item.json.style_profile}}"
+          },
+          "matchingColumns": [
+            "idea_id"
+          ],
+          "schema": [
+            {
+              "id": "idea_id",
+              "displayName": "idea_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_video_id",
+              "displayName": "source_video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hook",
+              "displayName": "hook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "angle",
+              "displayName": "angle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_title",
+              "displayName": "suggested_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_description",
+              "displayName": "suggested_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_tags",
+              "displayName": "suggested_tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "style_profile",
+              "displayName": "style_profile",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_message_id",
+              "displayName": "telegram_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_action",
+              "displayName": "review_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_video_status",
+              "displayName": "source_video_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "callback_query_id",
+              "displayName": "callback_query_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "typeVersion": 4.7
+      "id": "09eb941d-11cf-452a-9cb9-81da0d540972",
+      "name": "Persist Telegram Message Id",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        60416,
+        -9904
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-018",
-      "name": "Telegram Callback Trigger",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "position": [
-        240,
-        760
-      ],
-      "webhookId": "telegram-approval-callback-template",
       "parameters": {
         "updates": [
           "callback_query"
         ],
-        "additionalFields": {}
-      },
-      "credentials": {
-        "telegramApi": {
-          "id": "credential-id",
-          "name": "Telegram Bot Credential"
+        "additionalFields": {
+          "download": false
         }
       },
-      "typeVersion": 1
+      "id": "87b7dca5-4653-4a72-928c-9baa60309e01",
+      "name": "Telegram Callback Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        57088,
+        -9008
+      ],
+      "webhookId": "telegram-approval-callback-template",
+      "typeVersion": 1,
+      "credentials": {
+        "telegramApi": {
+          "id": "ngv7sx0xlEfHPe5p",
+          "name": "Telegram account"
+        }
+      }
     },
     {
-      "id": "yt-019",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const callback = $json.callback_query;\n\n  if (!callback?.data) {\n    throw new Error('Missing callback query data');\n  }\n\n  const normalizedData = String(callback.data)\n    .trim()\n    .replace(/\\n+/g, '|');\n\n  const [action, idea_id, style_profile = ''] = normalizedData\n    .split('|')\n    .map((value) => String(value || '').trim());\n\n  return {\n    json: {\n      action,\n      idea_id,\n      style_profile,\n      chat_id: callback.message?.chat?.id,\n      message_id: callback.message?.message_id,\n      callback_query_id: callback.id,\n    }\n  };"
+      },
+      "id": "f1153612-2a02-444f-8ad8-099a5c449436",
       "name": "Parse Approval Callback",
       "type": "n8n-nodes-base.code",
       "position": [
-        460,
-        760
+        57296,
+        -9008
       ],
-      "parameters": {
-        "jsCode": "const callback = $json.callback_query; if (!callback?.data) throw new Error('Missing callback query data'); const [action, idea_id] = callback.data.split('|'); return [{ json: { action, idea_id, chat_id: callback.message?.chat?.id, message_id: callback.message?.message_id, callback_query_id: callback.id } }];",
-        "mode": "runOnceForEachItem",
-        "language": "javaScript"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-020",
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "=1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ideas",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "ab40a34f-109b-4442-b994-600dd87dc521",
       "name": "Read Ideas Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "position": [
-        680,
-        760
+        57520,
+        -9008
       ],
-      "parameters": {
-        "documentId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
-        },
-        "sheetName": {
-          "__rl": true,
-          "mode": "list",
-          "value": "gid=2",
-          "cachedResultName": "ideas"
-        },
-        "authentication": "serviceAccount",
-        "options": {}
-      },
-      "typeVersion": 4.7
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-021",
+      "parameters": {
+        "jsCode": "const callback = $('Parse Approval Callback').first().json; \nconst match = items.find(item => item.json.idea_id === callback.idea_id); \nif (!match) \n  throw new Error(`Idea not found for ${callback.idea_id}`); \nreturn { json: { ...match.json, ...callback } };"
+      },
+      "id": "0e50a497-c53e-4ab5-9818-d72d671dd19b",
       "name": "Match Callback Idea",
       "type": "n8n-nodes-base.code",
       "position": [
-        900,
-        760
+        57744,
+        -9008
       ],
-      "parameters": {
-        "jsCode": "const callback = $('Parse Approval Callback').first().json; const match = items.find(item => item.json.idea_id === callback.idea_id); if (!match) throw new Error(`Idea not found for ${callback.idea_id}`); return [{ json: { ...match.json, ...callback } }];"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-022",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const map = { approve: 'approved', hold: 'hold', reject: 'rejected' }; \nconst status = map[$json.action] || 'draft'; \nreturn { json: { ...$json, status, review_action: $json.action, approved_at: status === 'approved' ? new Date().toISOString() : ($json.approved_at || '') } };"
+      },
+      "id": "724bad52-1b76-4b3a-910f-d80251ba2874",
       "name": "Build Review Update",
       "type": "n8n-nodes-base.code",
       "position": [
-        1120,
-        760
+        57968,
+        -9008
       ],
-      "parameters": {
-        "jsCode": "const map = { approve: 'approved', hold: 'hold', reject: 'rejected' }; const status = map[$json.action] || 'draft'; return [{ json: { ...$json, status, review_action: $json.action, approved_at: status === 'approved' ? new Date().toISOString() : ($json.approved_at || '') } }];",
-        "mode": "runOnceForEachItem",
-        "language": "javaScript"
-      },
       "typeVersion": 2
     },
     {
-      "id": "yt-023",
-      "name": "Persist Review State",
-      "type": "n8n-nodes-base.googleSheets",
-      "position": [
-        1340,
-        760
-      ],
       "parameters": {
         "operation": "appendOrUpdate",
-        "authentication": "serviceAccount",
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": "YOUR_SPREADSHEET_ID"
+          "value": "=1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": "gid=2",
-          "cachedResultName": "ideas"
+          "value": "ideas",
+          "mode": "name"
         },
         "columns": {
           "mappingMode": "autoMapInputData",
+          "value": {},
           "matchingColumns": [
             "idea_id"
           ],
-          "value": null
+          "schema": [
+            {
+              "id": "idea_id",
+              "displayName": "idea_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_video_id",
+              "displayName": "source_video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hook",
+              "displayName": "hook",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "angle",
+              "displayName": "angle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_title",
+              "displayName": "suggested_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_description",
+              "displayName": "suggested_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "suggested_tags",
+              "displayName": "suggested_tags",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "style_profile",
+              "displayName": "style_profile",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "telegram_message_id",
+              "displayName": "telegram_message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review_action",
+              "displayName": "review_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_video_status",
+              "displayName": "source_video_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "callback_query_id",
+              "displayName": "callback_query_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "typeVersion": 4.7
+      "id": "e07ce4d3-fc1c-48ff-b591-5a59759f12e8",
+      "name": "Persist Review State",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        58176,
+        -9008
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
     },
     {
-      "id": "yt-024",
-      "name": "Approval Is Approve?",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        1560,
-        760
-      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -562,34 +1222,31 @@
         },
         "options": {}
       },
+      "id": "10c7f148-8f39-495c-aa81-c20604b22abc",
+      "name": "Approval Is Approve?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        58016,
+        -8640
+      ],
       "typeVersion": 2.2
     },
     {
-      "id": "yt-025",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const now = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);\n  const rand = Math.random().toString(36).slice(2, 8);\n  const tags = String($json.suggested_tags || '')\n    .split(',')\n    .map(tag => tag.trim())\n    .filter(Boolean);\n\n  const styleProfiles = {\n    mystery: {\n      style: 'dark mystery shorts',\n      visual_style: 'photoreal cinematic live-action mystery documentary reenactment, realistic lighting, tense atmosphere, vertical 9:16',\n    },\n    emotional: {\n      style: 'warm emotional shorts',\n      visual_style: 'photoreal cinematic live-action emotional storytelling, soft natural lighting, vertical 9:16',\n    },\n    news: {\n      style: 'fast factual shorts',\n      visual_style: 'photoreal editorial documentary realism, clean composition, vertical 9:16',\n    },\n    knowledge: {\n      style: 'smart educational shorts',\n      visual_style: 'photoreal educational documentary realism, clear subject focus, vertical 9:16',\n    },\n  };\n\n  const styleProfile = $json.style_profile || 'mystery';\n  const selected = styleProfiles[styleProfile] || styleProfiles.mystery;\n\n  const requestedDuration = Number($json.duration_seconds || 60);\n  const targetDuration = Math.max(15, Math.min(60, Math.round(requestedDuration)));\n\n  const sceneCount = targetDuration >= 56 ? 8 : targetDuration >= 48 ? 7 : targetDuration >= 40 ? 6 : 5;\n  const sceneVideoDurationSeconds = 8;\n\n  return {\n    json: {\n      idea_id: $json.idea_id,\n      style_profile: styleProfile,\n      job_id: `yt_${now}_${rand}`,\n      topic: $json.topic || $json.suggested_title || 'Untitled topic',\n      style: selected.style,\n      visual_style: selected.visual_style,\n      target_duration_seconds: targetDuration,\n      duration_seconds: targetDuration,\n      scene_count: sceneCount,\n      scene_video_duration_seconds: sceneVideoDurationSeconds,\n      voice_id: 'tc_611c3f692fac944dff493a04',\n      render_bucket_name: $env.RENDER_BUCKET_NAME || 'render-bucket-m7',\n      gemini_text_model: 'models/gemini-2.5-flash',\n      gemini_image_model: 'models/gemini-2.5-flash-image',\n      veo_model: 'models/veo-3.1-lite-generate-preview',\n      hook_seed: $json.hook,\n      angle_seed: $json.angle,\n      summary_seed: $json.summary,\n      youtube_title: $json.suggested_title || $json.topic,\n      youtube_description: $json.suggested_description || '',\n      youtube_tags: tags,\n      youtube_privacy_status: 'private',\n      bgm_key: $json.bgm_key || '',\n    }\n  };"
+      },
+      "id": "9cdec415-d3b6-4a0b-a2a0-58820026ed59",
       "name": "Build Production Input",
       "type": "n8n-nodes-base.code",
       "position": [
-        1780,
-        660
+        58336,
+        -8640
       ],
-        "parameters": {
-          "jsCode": "const now = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);\nconst rand = Math.random().toString(36).slice(2, 8);\nconst tags = String($json.suggested_tags || '')\n  .split(',')\n  .map(tag => tag.trim())\n  .filter(Boolean);\n\nconst styleProfiles = {\n  mystery: {\n    style: 'dark mystery shorts',\n    visual_style: 'cinematic noir stills',\n  },\n  emotional: {\n    style: 'warm emotional shorts',\n    visual_style: 'soft cinematic stills',\n  },\n  news: {\n    style: 'fast factual shorts',\n    visual_style: 'clean editorial stills',\n  },\n  knowledge: {\n    style: 'smart educational shorts',\n    visual_style: 'clean educational stills',\n  },\n};\n\nconst styleProfile = $json.style_profile || 'mystery';\nconst selected = styleProfiles[styleProfile] || styleProfiles.mystery;\n\nreturn [{\n  json: {\n    idea_id: $json.idea_id,\n    style_profile: styleProfile,\n    job_id: `yt_${now}_${rand}`,\n    topic: $json.topic || $json.suggested_title || 'Untitled topic',\n    style: selected.style,\n    duration_seconds: 30,\n    voice_id: 'tc_60e5426de8b95f1d3000d7b5',\n    visual_style: selected.visual_style,\n    hook_clip_count: 1,\n    render_bucket_name: $env.RENDER_BUCKET_NAME || 'replace-me-bucket',\n    gemini_text_model: 'models/gemini-2.5-flash',\n    gemini_image_model: 'models/gemini-2.5-flash-image',\n    veo_model: 'models/veo-3.1-fast-generate-preview',\n    hook_seed: $json.hook,\n    angle_seed: $json.angle,\n    summary_seed: $json.summary,\n    youtube_title: $json.suggested_title || $json.topic,\n    youtube_description: $json.suggested_description || '',\n    youtube_tags: tags,\n    youtube_privacy_status: 'private',\n    bgm_key: 'shared/bgm/default.mp3'\n  }\n}];",
-          "mode": "runOnceForEachItem",
-          "language": "javaScript"
-        },
       "typeVersion": 2
     },
     {
-      "id": "yt-026",
-      "name": "Gemini Scenario Planner",
-      "type": "@n8n/n8n-nodes-langchain.googleGemini",
-      "position": [
-        2000,
-        660
-      ],
       "parameters": {
-        "resource": "text",
-        "operation": "message",
         "modelId": {
           "__rl": true,
           "mode": "id",
@@ -598,52 +1255,50 @@
         "messages": {
           "values": [
             {
-              "role": "user",
-              "content": "=Create a Shorts production plan from this approved idea. Return JSON only with: scenario_title, youtube_title, youtube_description, youtube_tags, narration_script, hook_video_prompts, still_image_prompts. Topic: {{$('Build Production Input').first().json.topic}}. Hook seed: {{$('Build Production Input').first().json.hook_seed}}. Angle seed: {{$('Build Production Input').first().json.angle_seed}}. Summary seed: {{$('Build Production Input').first().json.summary_seed}}. Keep one still image prompt and one hook video prompt."
+              "content": "=승인된 이 아이디어를 바탕으로 Shorts 제작 계획을 한국어로 만들어주세요.\n\n  다음 필드만 포함한 JSON만 반환하세요:\n  scenario_title,\n  duration_seconds,\n  youtube_title,\n  youtube_description,\n  youtube_tags,\n  narration_script,\n  scene_video_prompts,\n  still_image_prompts\n\n  필드 규칙:\n  - scenario_title: string\n  - duration_seconds: number\n  - youtube_title: string\n  - youtube_description: string\n  - youtube_tags: string[]\n  - narration_script: string\n  - scene_video_prompts: string[]\n  - still_image_prompts: string[]\n\n  조건:\n  - 주제: {{$('Build Production Input').first().json.topic}}\n  - 훅 시드: {{$('Build Production Input').first().json.hook_seed}}\n  - 앵글 시드: {{$('Build Production Input').first().json.angle_seed}}\n  - 요약 시드: {{$('Build Production Input').first().json.summary_seed}}\n  - 스타일 프로필: {{$('Build Production Input').first().json.style_profile}}\n  - 비주얼 스타일: {{$('Build Production Input').first().json.visual_style}}\n  - 목표 길이(초): {{$('Build Production Input').first().json.target_duration_seconds}}\n  - 장면 수: {{$('Build Production Input').first().json.scene_count}}\n  - 장면당 영상 길이(초): {{$('Build Production Input').first().json.scene_video_duration_seconds}}\n\n  - 모든 값은 한국어로 작성하세요.\n  - duration_seconds는 목표 길이와 정확히 같게 작성하세요.\n  - narration_script는 한국어 TTS로 읽었을 때 목표 길이에 최대한 가깝게 끝나는 분량으로 작성하세요.\n  - narration_script는 도입 1문장, 본문 5~7문장, 마무리 1문장 구조로 작성하세요.\n  - youtube_description은 2~3줄 분량으로 작성하세요.\n  - youtube_tags는 문자열 배열로 작성하세요.\n\n  - scene_video_prompts는 반드시 {{$('Build Production Input').first().json.scene_count}}개의 문자열만 포함하세요.\n  - still_image_prompts는 반드시 {{$('Build Production Input').first().json.scene_count}}개의 문자열만 포함하세요.\n  - 각 scene_video_prompts는 서로 다른 장면이어야 하며, 전체 서사가 시간 순서대로 자연스럽게 이어지게 작성하세요.\n  - 각 still_image_prompts는 각 장면과 1:1로 대응되게 작성하세요.\n\n  - scene_video_prompts는 Veo용 영상 프롬프트이므로, 장면의 피사체, 행동, 카메라 움직임, 분위기, 조명, 배경 디테일이 잘 드러나게 작성하세요.\n  - still_image_prompts는 이미지 생성용 프롬프트이므로, 한 장의 강한 실사 프레임처럼 보이게 작성하세요.\n\n  - mystery 스타일이면 모든 장면을 실사 포토리얼, 영화적 조명, 다큐 재연, 긴장감 있는 분위기, 역사/사건 현장 재현 톤으로 강하게 작성하세요.\n  - 특히 mystery 스타일에서는 일러스트, 애니메이션, 3D 렌더, 카툰 느낌이 절대 나지 않게 하세요.\n  - 인물 표정, 의상, 환경, 먼지, 연기, 화산재, 건축물 같은 현장 디테일을 적극 반영하세요.\n\n  - 모든 scene_video_prompts와 still_image_prompts에 다음 제약을 반드시 반영하세요:\n    화면 자막 없음, 한글 텍스트 없음, 영어 텍스트 없음, 로고 없음, 워터마크 없음, 뉴스 자막 바 없음, UI 없음, 썸네일 문구 없음\n\n  - JSON 외의 설명, 제목, 주석, markdown, 코드블록을 절대 포함하지 마세요."
             }
           ]
         },
-        "jsonOutput": true,
         "simplify": false,
+        "jsonOutput": true,
         "builtInTools": {},
         "options": {
-          "systemMessage": "Output valid JSON only.",
+          "systemMessage": "Output valid minified JSON only. Do not use markdown or code fences.",
+          "maxOutputTokens": 8192,
           "temperature": 0.7,
-          "maxOutputTokens": 1500,
           "thinkingBudget": 0
         }
       },
+      "id": "ee915594-061e-43bf-a447-e361b69469a3",
+      "name": "Gemini Scenario Planner",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        58656,
+        -8640
+      ],
+      "typeVersion": 1.1,
       "credentials": {
         "googlePalmApi": {
-          "id": "credential-id",
-          "name": "Google Gemini Credential"
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
         }
-      },
-      "typeVersion": 1.1
+      }
     },
     {
-      "id": "12b6b52c-9880-4653-b7eb-c6ee7b310006",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const response = $json;\nconst candidate = response.candidates?.[0];\nconst parts = candidate?.content?.parts || [];\n\nconst rawText = parts\n  .filter((part) => typeof part.text === 'string')\n  .map((part) => part.text)\n  .join('\\n')\n  .trim();\n\nif (!rawText) {\n  throw new Error('Gemini scenario response did not include text output');\n}\n\nconst cleaned = rawText\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```/i, '')\n  .replace(/```$/i, '')\n  .trim();\n\nconst jsonStart = cleaned.indexOf('{');\nconst jsonEnd = cleaned.lastIndexOf('}');\n\nif (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {\n  throw new Error('Gemini scenario response did not contain a complete JSON object');\n}\n\nconst raw = cleaned.slice(jsonStart, jsonEnd + 1);\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (error) {\n  throw new Error(`Failed to parse scenario JSON: ${error.message}`);\n}\n\nconst input = $('Build Production Input').first().json;\nconst sceneCount = Number(input.scene_count || 8);\n\nconst sceneVideoPrompts = Array.isArray(parsed.scene_video_prompts) ? parsed.scene_video_prompts : [];\nconst stillImagePrompts = Array.isArray(parsed.still_image_prompts) ? parsed.still_image_prompts : [];\nconst youtubeTags = Array.isArray(parsed.youtube_tags)\n  ? parsed.youtube_tags\n  : (Array.isArray(input.youtube_tags) ? input.youtube_tags : []);\n\nconst lastSceneVideoPrompt = sceneVideoPrompts.length ? sceneVideoPrompts[sceneVideoPrompts.length - 1] : '';\nconst lastStillImagePrompt = stillImagePrompts.length ? stillImagePrompts[stillImagePrompts.length - 1] : '';\n\nconst normalizedSceneVideoPrompts = Array.from({ length: sceneCount }, (_, index) => {\n  return sceneVideoPrompts[index]\n    || lastSceneVideoPrompt\n    || `${input.topic} 장면 ${index + 1}, 세로형 실사 시네마틱 영상, 텍스트 없음, 워터마크 없음`;\n});\n\nconst normalizedStillImagePrompts = Array.from({ length: sceneCount }, (_, index) => {\n  return stillImagePrompts[index]\n    || lastStillImagePrompt\n    || `${input.topic} 장면 ${index + 1}, 세로형 실사 포토리얼 이미지, 텍스트 없음, 워터마크 없음`;\n});\n\nreturn {\n  json: {\n    ...input,\n    scenario_title: parsed.scenario_title || input.topic,\n    duration_seconds: Number(input.target_duration_seconds || input.duration_seconds || 60),\n    youtube_title: parsed.youtube_title || input.youtube_title,\n    youtube_description: parsed.youtube_description || input.youtube_description,\n    youtube_tags: youtubeTags,\n    narration_script: parsed.narration_script || input.topic,\n    scene_video_prompts: normalizedSceneVideoPrompts,\n    still_image_prompts: normalizedStillImagePrompts,\n  },\n};"
+      },
+      "id": "998cb706-be17-4ee8-a510-a425b55eb7a3",
       "name": "Parse Scenario",
       "type": "n8n-nodes-base.code",
       "position": [
-        2272,
-        660
+        58976,
+        -8640
       ],
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const response = $json;\nconst candidate = response.candidates?.[0];\nconst parts = candidate?.content?.parts || [];\nconst textPart = parts.find((part) => typeof part.text === 'string');\nif (!textPart?.text) {\n  throw new Error('Gemini scenario response did not include text output');\n}\nconst raw = textPart.text.trim().replace(/^```json\\s*/i, '').replace(/^```/i, '').replace(/```$/i, '').trim();\nconst parsed = JSON.parse(raw);\nconst input = $('Build Production Input').first().json;\nconst hookVideoPrompts = Array.isArray(parsed.hook_video_prompts) ? parsed.hook_video_prompts : [];\nconst stillImagePrompts = Array.isArray(parsed.still_image_prompts) ? parsed.still_image_prompts : [];\n\nreturn [{\n  json: {\n    ...input,\n    scenario_title: parsed.scenario_title || input.topic,\n    youtube_title: parsed.youtube_title || input.youtube_title,\n    youtube_description: parsed.youtube_description || input.youtube_description,\n    youtube_tags: parsed.youtube_tags || input.youtube_tags,\n    narration_script: parsed.narration_script || input.topic,\n    hook_video_prompt: hookVideoPrompts[0] || (input.topic + ' vertical cinematic hook shot'),\n    still_image_prompt: stillImagePrompts[0] || (input.topic + ' cinematic still frame')\n  }\n}];"
-      },
       "typeVersion": 2
     },
     {
-      "id": "ae619bf1-6022-4fd6-aa85-5ca4d9f10007",
-      "name": "Typecast Narration",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        2544,
-        660
-      ],
       "parameters": {
         "method": "POST",
         "url": "https://api.typecast.ai/v1/text-to-speech",
@@ -657,9 +1312,8 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ ({\n  voice_id: $('Parse Scenario').first().json.voice_id,\n  text: $('Parse Scenario').first().json.narration_script,\n  model: 'ssfm-v30',\n  language: 'kor',\n  prompt: {\n    emotion_type: 'smart'\n  },\n  output: {\n    volume: 100,\n    audio_pitch: 0,\n    audio_tempo: 1,\n    audio_format: 'mp3'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n    voice_id: $('Parse Scenario').first().json.voice_id,\n    text: $('Parse Scenario').first().json.narration_script,\n    model: 'ssfm-v30',\n    language: 'kor',\n    prompt: {\n      emotion_type: 'smart'\n    },\n    output: {\n      volume: 100,\n      audio_pitch: 0,\n      audio_tempo: 1,\n      audio_format: 'mp3'\n    }\n  }) }}",
         "options": {
           "response": {
             "response": {
@@ -669,60 +1323,56 @@
           }
         }
       },
+      "id": "e62da81c-95e9-40eb-831f-28e8e55e7947",
+      "name": "Typecast Narration",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        60576,
+        -8320
+      ],
       "typeVersion": 4.4
     },
     {
-      "id": "c3778664-076e-4378-95ee-43ca6d010008",
-      "name": "Upload Narration to S3",
-      "type": "n8n-nodes-base.awsS3",
-      "position": [
-        2816,
-        660
-      ],
       "parameters": {
-        "resource": "file",
         "operation": "upload",
         "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
         "fileName": "narration.mp3",
-        "binaryData": true,
         "binaryPropertyName": "narration",
         "additionalFields": {
           "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/audio'}}"
         }
       },
+      "id": "08991009-6678-4d8b-a7eb-7fe7ed9006c4",
+      "name": "Upload Narration to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        60896,
+        -8320
+      ],
+      "typeVersion": 2,
       "credentials": {
         "aws": {
-          "id": "credential-id",
-          "name": "AWS account"
+          "id": "luApxWjqOPRTgh7X",
+          "name": "AWS (IAM) account"
         }
-      },
-      "typeVersion": 2
+      }
     },
     {
-      "id": "ca8b292b-6e50-4198-939c-f8f72fc10009",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": " const script = $('Parse Scenario').first().json.narration_script || '';\n  const chunks = script.split(/(?<=[.!?])\\s+/).filter(Boolean);\n  const totalDuration = Number($('Parse Scenario').first().json.duration_seconds || 60);\n  const secondsPerChunk = Math.max(2, Math.floor(totalDuration / Math.max(chunks.length, 1)));\n\n  const toSrtTime = (seconds) => {\n    const date = new Date(seconds * 1000).toISOString().slice(11, 23);\n    return date.replace('.', ',');\n  };\n\n  const lines = [];\n  for (let index = 0; index < chunks.length; index++) {\n    const start = index * secondsPerChunk;\n    const end = Math.min(totalDuration, start + secondsPerChunk);\n    lines.push(String(index + 1));\n    lines.push(`${toSrtTime(start)} --> ${toSrtTime(end)}`);\n    lines.push(chunks[index]);\n    lines.push('');\n  }\n\n  return {\n    json: {\n      subtitle_content: lines.join('\\n')\n    }\n  };"
+      },
+      "id": "aa06b98c-b251-4c6d-b1b8-eb1dfb30a952",
       "name": "Build Subtitle File",
       "type": "n8n-nodes-base.code",
       "position": [
-        3088,
-        660
+        61216,
+        -8320
       ],
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const script = $('Parse Scenario').first().json.narration_script || '';\nconst chunks = script.split(/(?<=[.!?])\\s+/).filter(Boolean);\nconst totalDuration = Number($('Parse Scenario').first().json.duration_seconds || 30);\nconst secondsPerChunk = Math.max(2, Math.floor(totalDuration / Math.max(chunks.length, 1)));\n\nconst toSrtTime = (seconds) => {\n  const date = new Date(seconds * 1000).toISOString().slice(11, 23);\n  return date.replace('.', ',');\n};\n\nconst lines = [];\nfor (let index = 0; index < chunks.length; index++) {\n  const start = index * secondsPerChunk;\n  const end = Math.min(totalDuration, start + secondsPerChunk);\n  lines.push(String(index + 1));\n  lines.push(`${toSrtTime(start)} --> ${toSrtTime(end)}`);\n  lines.push(chunks[index]);\n  lines.push('');\n}\n\nreturn [{\n  json: {\n    subtitle_content: lines.join('\\n')\n  }\n}];"
-      },
       "typeVersion": 2
     },
     {
-      "id": "59e2b61c-5951-4d93-b2e8-728ff2d10010",
-      "name": "Upload Subtitle to S3",
-      "type": "n8n-nodes-base.awsS3",
-      "position": [
-        3360,
-        660
-      ],
       "parameters": {
-        "resource": "file",
         "operation": "upload",
         "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
         "fileName": "captions.srt",
@@ -732,153 +1382,119 @@
           "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/subtitles'}}"
         }
       },
+      "id": "471b7b39-6a46-4d05-8684-425e80fbf328",
+      "name": "Upload Subtitle to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "position": [
+        61536,
+        -8320
+      ],
+      "typeVersion": 2,
       "credentials": {
         "aws": {
-          "id": "credential-id",
-          "name": "AWS account"
+          "id": "luApxWjqOPRTgh7X",
+          "name": "AWS (IAM) account"
         }
-      },
-      "typeVersion": 2
+      }
     },
     {
-      "id": "08eb9fd3-0e9a-4f42-8690-c76a5c910011",
-      "name": "Gemini Still Image",
-      "type": "@n8n/n8n-nodes-langchain.googleGemini",
-      "position": [
-        3632,
-        660
-      ],
       "parameters": {
-        "resource": "image",
-        "operation": "generate",
-        "modelId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{$('Parse Scenario').first().json.gemini_image_model}}"
-        },
-        "prompt": "={{$('Parse Scenario').first().json.still_image_prompt}}",
-        "options": {
-          "binaryPropertyOutput": "image"
+        "operation": "upload",
+        "bucketName": "={{$json.render_bucket_name}}",
+        "fileName": "={{$json.scene_number + '.png'}}",
+        "binaryPropertyName": "image",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $json.job_id + '/images'}}"
         }
       },
-      "credentials": {
-        "googlePalmApi": {
-          "id": "credential-id",
-          "name": "Google Gemini Credential"
-        }
-      },
-      "typeVersion": 1.1
-    },
-    {
-      "id": "1e72a330-2304-499e-b924-f1c77ba60013",
+      "id": "54238e53-f8d3-4de8-8045-5a29b9a13a00",
       "name": "Upload Image to S3",
       "type": "n8n-nodes-base.awsS3",
       "position": [
-        3904,
-        660
+        63744,
+        -8304
       ],
-      "parameters": {
-        "resource": "file",
-        "operation": "upload",
-        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
-        "fileName": "01.png",
-        "binaryData": true,
-        "binaryPropertyName": "image",
-        "additionalFields": {
-          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/images'}}"
-        }
-      },
+      "typeVersion": 2,
       "credentials": {
         "aws": {
-          "id": "credential-id",
-          "name": "AWS account"
+          "id": "luApxWjqOPRTgh7X",
+          "name": "AWS (IAM) account"
         }
-      },
-      "typeVersion": 2
+      }
     },
     {
-      "id": "a4242836-e99b-4833-9f7f-4c1ef7e60014",
+      "parameters": {
+        "resource": "video",
+        "modelId": {
+          "__rl": true,
+          "value": "={{$('Expand Scenes').item.json.veo_model}}",
+          "mode": "id"
+        },
+        "prompt": "={{$('Expand Scenes').item.json.scene_video_prompt}}",
+        "options": {
+          "sampleCount": 1,
+          "durationSeconds": "={{$('Expand Scenes').item.json.scene_video_duration_seconds}}",
+          "aspectRatio": "9:16",
+          "binaryPropertyOutput": "video"
+        }
+      },
+      "id": "866c808f-d011-4446-b451-794acec7f6ec",
       "name": "Veo Lite Hook Clip",
       "type": "@n8n/n8n-nodes-langchain.googleGemini",
       "position": [
-        4176,
-        660
+        64976,
+        -8304
       ],
-      "parameters": {
-        "resource": "video",
-        "operation": "generate",
-        "modelId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{$('Parse Scenario').first().json.veo_model}}"
-        },
-        "prompt": "={{$('Parse Scenario').first().json.hook_video_prompt}}",
-        "returnAs": "video",
-          "options": {
-            "sampleCount": 1,
-            "durationSeconds": 4,
-            "aspectRatio": "9:16",
-            "binaryPropertyOutput": "video"
-          }
-        },
+      "typeVersion": 1.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
       "credentials": {
         "googlePalmApi": {
-          "id": "credential-id",
-          "name": "Google Gemini Credential"
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
         }
-      },
-      "typeVersion": 1.1
+      }
     },
     {
-      "id": "5ec58d7c-f2ad-42cb-9a16-cf1bd7590015",
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{$json.render_bucket_name}}",
+        "fileName": "={{$json.scene_number + '.mp4'}}",
+        "binaryPropertyName": "video",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $json.job_id + '/videos'}}"
+        }
+      },
+      "id": "de98c3c6-5c7e-4bc2-8749-29e1affb926e",
       "name": "Upload Hook Video to S3",
       "type": "n8n-nodes-base.awsS3",
       "position": [
-        4448,
-        660
+        65936,
+        -8304
       ],
-      "parameters": {
-        "resource": "file",
-        "operation": "upload",
-        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
-        "fileName": "01.mp4",
-        "binaryData": true,
-        "binaryPropertyName": "video",
-        "additionalFields": {
-          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/videos'}}"
-        }
-      },
+      "typeVersion": 2,
       "credentials": {
         "aws": {
-          "id": "credential-id",
-          "name": "AWS account"
+          "id": "luApxWjqOPRTgh7X",
+          "name": "AWS (IAM) account"
         }
-      },
-      "typeVersion": 2
+      }
     },
     {
-      "id": "bb72fd32-e7ac-4bf4-a8c4-b804905e0017",
+      "parameters": {
+        "jsCode": "const scenario = $('Parse Scenario').first().json;\n\n  const sceneCount = Number(\n    scenario.scene_count\n    || (Array.isArray(scenario.still_image_prompts) ? scenario.still_image_prompts.length : 0)\n  );\n\n  if (!sceneCount) {\n    throw new Error('No scenes found for render manifest');\n  }\n\n  const base = `jobs/${scenario.job_id}`;\n  const sceneNumbers = Array.from({ length: sceneCount }, (_, i) =>\n    String(i + 1).padStart(2, '0')\n  );\n\n  return [\n    {\n      json: {\n        ...scenario,\n        audio_keys: [base + '/audio/narration.mp3'],\n        image_keys: sceneNumbers.map((n) => `${base}/images/${n}.png`),\n        video_keys: sceneNumbers.map((n) => `${base}/videos/${n}.mp4`),\n        subtitle_key: base + '/subtitles/captions.srt',\n        bgm_key: base + '/audio/bgm.mp3',\n        output_prefix: base + '/output/'\n      }\n    }\n  ];"
+      },
+      "id": "aa111443-6b00-441c-a3d0-61f7c9e9147d",
       "name": "Prepare Render Manifest",
       "type": "n8n-nodes-base.code",
       "position": [
-        4720,
-        660
+        67264,
+        -8384
       ],
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const scenario = $('Parse Scenario').first().json;\nconst base = 'jobs/' + scenario.job_id;\nreturn [{\n  json: {\n    ...scenario,\n    audio_keys: [base + '/audio/narration.mp3'],\n    image_keys: [base + '/images/01.png'],\n    video_keys: [base + '/videos/01.mp4'],\n    subtitle_key: base + '/subtitles/captions.srt',\n    output_prefix: base + '/output/'\n  }\n}];"
-      },
       "typeVersion": 2
     },
     {
-      "id": "7b11c7fe-7204-4ece-a62f-b594e6940019",
-      "name": "Start Render Job",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        4992,
-        660
-      ],
       "parameters": {
         "method": "POST",
         "url": "http://automation.n8n.local:8080/render-jobs",
@@ -892,9 +1508,8 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ ({\n  job_id: $json.job_id,\n  video_keys: $json.video_keys,\n  image_keys: $json.image_keys,\n  audio_keys: $json.audio_keys,\n  subtitle_key: $json.subtitle_key,\n  bgm_key: $json.bgm_key,\n  output_prefix: $json.output_prefix\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  job_id: $json.job_id,\n  video_keys: $json.video_keys,\n  image_keys: $json.image_keys,\n  audio_keys: $json.audio_keys,\n  subtitle_key: $json.subtitle_key,\n  bgm_key: $json.bgm_key,\n  output_prefix: $json.output_prefix\n}) }}",
         "options": {
           "response": {
             "response": {
@@ -903,48 +1518,46 @@
           }
         }
       },
+      "id": "12599af5-45a2-4223-8e08-449181669690",
+      "name": "Start Render Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        67584,
+        -8384
+      ],
       "typeVersion": 4.4
     },
     {
-      "id": "5151c629-4fe6-4759-b8c7-60f53f1b0021",
-      "name": "Render Context",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        5264,
-        692
-      ],
       "parameters": {
         "mode": "raw",
         "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  status: $json.status,\n  youtube_title: $('Prepare Render Manifest').first().json.youtube_title,\n  youtube_description: $('Prepare Render Manifest').first().json.youtube_description,\n  youtube_tags: $('Prepare Render Manifest').first().json.youtube_tags,\n  youtube_privacy_status: $('Prepare Render Manifest').first().json.youtube_privacy_status\n}) }}",
         "options": {}
       },
+      "id": "24f5c634-77ae-4592-8f2b-f2e92297fbd0",
+      "name": "Render Context",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        67904,
+        -8384
+      ],
       "typeVersion": 3.4
     },
     {
-      "id": "41717db2-9b88-4bc2-96ba-a32a45ca0022",
+      "parameters": {
+        "amount": 30
+      },
+      "id": "6fb51cec-9251-431a-81ee-3a6a269e1bab",
       "name": "Wait 30 Seconds",
       "type": "n8n-nodes-base.wait",
       "position": [
-        5504,
-        692
+        68224,
+        -8384
       ],
-      "parameters": {
-        "resume": "timeInterval",
-        "amount": 30,
-        "unit": "seconds"
-      },
-      "typeVersion": 1.1
+      "typeVersion": 1.1,
+      "webhookId": "a55208a0-1ed9-446a-92e1-6b0b267c4b0e"
     },
     {
-      "id": "2c0130b2-b4af-4a4b-bc5b-8c93a2bd0012",
-      "name": "Check Render Status",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        5744,
-        692
-      ],
       "parameters": {
-        "method": "GET",
         "url": "=http://automation.n8n.local:8080/render-jobs/{{$json.job_id}}",
         "sendHeaders": true,
         "headerParameters": {
@@ -963,33 +1576,32 @@
           }
         }
       },
+      "id": "4b94625d-955a-4eb2-98ff-91c56580e139",
+      "name": "Check Render Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        68544,
+        -8384
+      ],
       "typeVersion": 4.4
     },
     {
-      "id": "621a4839-bc0d-4c73-b228-3831ad50ca3c",
-      "name": "Status Context",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        5984,
-        692
-      ],
       "parameters": {
         "mode": "raw",
         "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  status: $json.status,\n  error: $json.error || '',\n  video_url: $json.video_url || $json.output_url || '',\n  youtube_title: $('Prepare Render Manifest').first().json.youtube_title,\n  youtube_description: $('Prepare Render Manifest').first().json.youtube_description,\n  youtube_tags: $('Prepare Render Manifest').first().json.youtube_tags,\n  youtube_privacy_status: $('Prepare Render Manifest').first().json.youtube_privacy_status\n}) }}",
         "options": {}
       },
+      "id": "6bab250c-375a-4db1-84a0-35a62d4a8742",
+      "name": "Status Context",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        68864,
+        -8384
+      ],
       "typeVersion": 3.4
     },
     {
-      "id": "88f2bfc3-a997-4838-a4e6-911c60d377ec",
-      "name": "Render Done?",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        6224,
-        692
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
             "version": 2,
@@ -1009,20 +1621,20 @@
               "rightValue": "done"
             }
           ]
-        }
+        },
+        "options": {}
       },
+      "id": "73a74ef9-debc-4ce2-9942-97026c984eb1",
+      "name": "Render Done?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        69184,
+        -8384
+      ],
       "typeVersion": 2.2
     },
     {
-      "id": "89d9a5d9-d3c7-48c1-98cf-cc8987ba9391",
-      "name": "Render Failed?",
-      "type": "n8n-nodes-base.if",
-      "position": [
-        6464,
-        820
-      ],
       "parameters": {
-        "options": {},
         "conditions": {
           "options": {
             "version": 2,
@@ -1042,96 +1654,911 @@
               "rightValue": "failed"
             }
           ]
-        }
+        },
+        "options": {}
       },
+      "id": "4a32bcea-2b3d-4d1b-98d6-d99f79b8da71",
+      "name": "Render Failed?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        69504,
+        -8144
+      ],
       "typeVersion": 2.2
     },
     {
-      "id": "3acacedb-bafa-4fbf-8d3e-f198b19b9308",
-      "name": "Download Rendered Video",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [
-        6464,
-        564
-      ],
       "parameters": {
-        "method": "GET",
         "url": "={{$json.video_url}}",
         "options": {
           "response": {
             "response": {
-              "responseFormat": "file",
-              "outputPropertyName": "data"
+              "responseFormat": "file"
             }
           }
         }
       },
+      "id": "22c673a0-7142-4a51-a871-9ffed3718091",
+      "name": "Download Rendered Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        69504,
+        -8528
+      ],
       "typeVersion": 4.4
     },
     {
-      "id": "4ec85126-51da-4f3b-a04f-16552fdcb244",
-      "name": "YouTube Upload",
-      "type": "n8n-nodes-base.youTube",
-      "position": [
-        6704,
-        564
-      ],
       "parameters": {
         "resource": "video",
         "operation": "upload",
         "title": "={{$json.youtube_title}}",
         "regionCode": "KR",
         "categoryId": "22",
-        "binaryProperty": "data",
         "options": {
           "description": "={{$json.youtube_description}}",
-          "tags": "={{Array.isArray($json.youtube_tags) ? $json.youtube_tags.join(',') : ($json.youtube_tags || '')}}",
-          "privacyStatus": "={{$json.youtube_privacy_status}}",
           "embeddable": true,
           "notifySubscribers": false,
-          "publicStatsViewable": true
+          "privacyStatus": "={{$json.youtube_privacy_status}}",
+          "publicStatsViewable": true,
+          "tags": "={{Array.isArray($json.youtube_tags) ? $json.youtube_tags.join(',') : ($json.youtube_tags || '')}}"
         }
       },
+      "id": "d4d45009-24b8-4c41-93dc-23b33f209ad7",
+      "name": "YouTube Upload",
+      "type": "n8n-nodes-base.youTube",
+      "position": [
+        69824,
+        -8528
+      ],
+      "typeVersion": 1,
       "credentials": {
         "youTubeOAuth2Api": {
-          "id": "credential-id",
-          "name": "youTubeOAuth2Api Credential"
+          "id": "wq1U8TLyjVuGciTE",
+          "name": "YouTube account"
         }
-      },
-      "typeVersion": 1
+      }
     },
     {
-      "id": "2ea5b79c-2e49-4d7e-933c-8b1a58d2415c",
-      "name": "Upload Result",
-      "type": "n8n-nodes-base.set",
-      "position": [
-        6944,
-        564
-      ],
       "parameters": {
         "mode": "raw",
         "jsonOutput": "={{ ({\n  job_id: $('Prepare Render Manifest').first().json.job_id,\n  youtube_upload_id: $json.uploadId || '',\n  youtube_video_id: $json.id || '',\n  youtube_url: $json.id ? ('https://www.youtube.com/watch?v=' + $json.id) : ''\n}) }}",
         "options": {}
       },
+      "id": "52116d12-91c9-4911-969a-6cd983ba40fa",
+      "name": "Upload Result",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        70144,
+        -8528
+      ],
       "typeVersion": 3.4
     },
     {
-      "id": "7e0fa1ed-2cd6-48a6-bf04-d67d4d7fe842",
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "throw new Error($json.error || ('Render job ' + $json.job_id + ' failed'));"
+      },
+      "id": "0218f57a-cef4-4ad4-a4e0-02e6e3e0150d",
       "name": "Throw Render Error",
       "type": "n8n-nodes-base.code",
       "position": [
-        6704,
-        884
+        69824,
+        -8144
       ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": " const styleProfile = $json.style_profile || 'mystery';\n\n  const scenarioContext = [\n    `Topic: ${$json.topic || ''}`,\n    `Hook: ${$json.hook_seed || ''}`,\n    `Angle: ${$json.angle_seed || ''}`,\n    `Summary: ${$json.summary_seed || ''}`,\n    `Scenario title: ${$json.scenario_title || ''}`\n  ].join(' | ');\n\n  const baseRules = [\n    'Minimal instrumental background music for Korean Shorts narration.',\n    'Very quiet, subtle, and always underneath the voice.',\n    'Must never compete with narration.',\n    'Leave plenty of space for speech.',\n    'Short loopable background bed.',\n    'Seamless loop.',\n    'The ending should connect naturally back to the beginning.',\n    'No obvious intro, no obvious outro, no final hit, no resolved ending.',\n    'No abrupt transitions, no dramatic rise, no drop, no stinger.',\n    'Stable texture, steady mood, low energy throughout.',\n    `Match the emotional tone of this short scenario: ${scenarioContext}`\n  ].join(' ');\n\n  const prompts = {\n    mystery: `${baseRules} Dark ambient tension, sparse low drone, subtle cinematic mystery texture, restrained documentary suspense.`,\n    emotional: `${baseRules} Warm soft piano pad, delicate emotional atmosphere, gentle and restrained.`,\n    news: `${baseRules} Clean neutral pulse, light modern editorial texture, controlled and factual.`,\n    knowledge: `${baseRules} Clean smart educational tone, soft marimba and pad texture, neat and understated.`\n  };\n\n  return {\n    json: {\n      ...$json,\n      bgm_prompt: prompts[styleProfile] || prompts.mystery,\n      bgm_negative_prompt: [\n        'vocals',\n        'singing',\n        'choir',\n        'rap',\n        'spoken words',\n        'strong lead melody',\n        'catchy hook',\n        'loud percussion',\n        'aggressive drums',\n        'cinematic boom',\n        'riser',\n        'drop',\n        'stinger',\n        'abrupt transitions',\n        'obvious intro',\n        'obvious outro',\n        'ending hit',\n        'final cadence',\n        'resolved ending',\n        'big dynamic changes'\n      ].join(', ')\n    }\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        59296,
+        -8640
+      ],
+      "id": "a8780ece-8529-4cd1-aa20-c7878a4c96d1",
+      "name": "Build BGM Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/lyria-3-clip-preview:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({\n    contents: [\n      {\n        parts: [\n          {\n            text: $json.bgm_prompt\n          }\n        ]\n      }\n    ]\n  }) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        59616,
+        -8640
+      ],
+      "id": "f91f8f02-952f-4e8d-94b6-8cb90ea6c923",
+      "name": "Generate BGM",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parts = $json.candidates?.[0]?.content?.parts || [];\n  const audioPart = parts.find(part => part.inlineData?.data);\n\n  if (!audioPart) {\n    throw new Error('Lyria response missing audio inlineData');\n  }\n\n  return {\n    json: {\n      ...$('Build BGM Prompt').first().json,\n      bgm_base64: audioPart.inlineData.data,\n      bgm_mime_type: audioPart.inlineData.mimeType || 'audio/mpeg',\n      bgm_filename: 'bgm.mp3'\n    }\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        59936,
+        -8640
+      ],
+      "id": "d255b08a-3a21-4faf-94d0-09d90c5a86b0",
+      "name": "Extract BGM Audio"
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "bgm_base64",
+        "binaryPropertyName": "bgm",
+        "options": {
+          "fileName": "={{$json.bgm_filename}}",
+          "mimeType": "={{$json.bgm_mime_type}}"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        59936,
+        -8320
+      ],
+      "id": "522a1c26-f0d9-4e50-bb7a-8e242484f722",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{$('Parse Scenario').first().json.render_bucket_name}}",
+        "fileName": "bgm.mp3",
+        "binaryPropertyName": "bgm",
+        "additionalFields": {
+          "parentFolderKey": "={{'jobs/' + $('Parse Scenario').first().json.job_id + '/audio'}}"
+        }
+      },
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [
+        60256,
+        -8320
+      ],
+      "id": "c21d80fe-e8ac-4fce-91df-3cd72bb33238",
+      "name": "Upload a file",
+      "credentials": {
+        "aws": {
+          "id": "luApxWjqOPRTgh7X",
+          "name": "AWS (IAM) account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$json.gemini_image_model}}"
+        },
+        "prompt": "={{$json.still_image_prompt}}",
+        "options": {
+          "binaryPropertyOutput": "image"
+        }
+      },
+      "id": "f7ec53bb-f905-401e-802c-50df4587b2ca",
+      "name": "Gemini Still Image",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        62784,
+        -8304
+      ],
+      "typeVersion": 1.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "  const items = $input.all();\n\n  return items\n    .filter((item) => String(item.json.video_id ?? '').trim())\n    .sort((a, b) => {\n      const aTime = Date.parse(String(a.json.published_at ?? '')) || 0;\n      const bTime = Date.parse(String(b.json.published_at ?? '')) || 0;\n      return bTime - aTime;\n    });"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        58832,
+        -10112
+      ],
+      "id": "9ae480bb-3be0-4784-94e4-fa34268e5887",
+      "name": "Sort Fresh Candidates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n  return items.length > 0 ? [items[0]] : [];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        59040,
+        -10112
+      ],
+      "id": "3fa091f1-54f8-4d9a-a560-96f04892afe0",
+      "name": "Pick First Fresh Candidate"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1eBJ1cgil11EwyY_ksMp1t5ZUiix9sddCyG1-HCB1AbY",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "source_videos",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "video_id": "={{$json.source_video_id}}",
+            "channel_id": "={{$('Pick First Fresh Candidate').item.json.channel_id}}",
+            "channel_name": "={{$('Pick First Fresh Candidate').item.json.channel_name}}",
+            "title": "={{$('Pick First Fresh Candidate').item.json.title}}",
+            "url": "={{$('Pick First Fresh Candidate').item.json.url}}",
+            "published_at": "={{$('Pick First Fresh Candidate').item.json.published_at}}",
+            "harvested_at": "={{$('Pick First Fresh Candidate').item.json.harvested_at}}",
+            "status": "={{$json.source_video_status}}"
+          },
+          "matchingColumns": [
+            "video_id"
+          ],
+          "schema": [
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "channel_id",
+              "displayName": "channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel_name",
+              "displayName": "channel_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "harvested_at",
+              "displayName": "harvested_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        59904,
+        -10112
+      ],
+      "id": "ae26f3fe-8f23-49ef-80b7-78771e05199b",
+      "name": "Update Source Video Status To Idea Created",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "QeY3JtkjX4t42fk9",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const scenario = $('Parse Scenario').first().json;\n\n  const sceneVideoPrompts = Array.isArray(scenario.scene_video_prompts)\n    ? scenario.scene_video_prompts\n    : [];\n  const stillImagePrompts = Array.isArray(scenario.still_image_prompts)\n    ? scenario.still_image_prompts\n    : [];\n\n  const sceneCount = Number(\n    scenario.scene_count || Math.max(sceneVideoPrompts.length, stillImagePrompts.length, 0)\n  );\n\n  if (!sceneCount) {\n    throw new Error('No scenes found in Parse Scenario');\n  }\n\n  return Array.from({ length: sceneCount }, (_, index) => {\n    const sceneNumber = String(index + 1).padStart(2, '0');\n\n    return {\n      json: {\n        ...scenario,\n        scene_index: index,\n        scene_number: sceneNumber,\n        scene_video_prompt:\n          sceneVideoPrompts[index]\n          || sceneVideoPrompts[sceneVideoPrompts.length - 1]\n          || `${scenario.topic} 장면 ${index + 1}, 세로형 실사 시네마틱 영상, 텍스트 없음, 워터마크 없음`,\n        still_image_prompt:\n          stillImagePrompts[index]\n          || stillImagePrompts[stillImagePrompts.length - 1]\n          || `${scenario.topic} 장면 ${index + 1}, 세로형 실사 포토리얼 이미지, 텍스트 없음, 워터마크 없음`\n      }\n    };\n  });"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        61856,
+        -8320
+      ],
+      "id": "ad65d218-1290-4e94-b909-094dde4d97f0",
+      "name": "Expand Scenes"
+    },
+    {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "throw new Error($json.error || ('Render job ' + $json.job_id + ' failed'));"
+        "jsCode": "const scene = $('Expand Scenes').item.json;\n\n/** @type {any} */\nconst binary = $binary ?? {};\nconst image = binary.image;\n\nconst parseFileSize = (value) => {\n  if (typeof value === 'number') return value;\n  if (typeof value !== 'string') return 0;\n\n  const match = value.trim().match(/^([\\d.]+)\\s*(B|bytes|KB|MB|GB|KiB|MiB|GiB)?$/i);\n  if (!match) return 0;\n\n  const amount = Number(match[1]);\n  const unit = (match[2] || 'B').toLowerCase();\n\n  if (unit === 'gb' || unit === 'gib') return Math.round(amount * 1024 * 1024 * 1024);\n  if (unit === 'mb' || unit === 'mib') return Math.round(amount * 1024 * 1024);\n  if (unit === 'kb' || unit === 'kib') return Math.round(amount * 1024);\n  return Math.round(amount);\n};\n\nconst bytes = parseFileSize(image?.fileSize);\nconst imageOk = bytes > 1024;\n\nreturn {\n  json: {\n    ...scene,\n    ...$json,\n    image_ok: imageOk,\n    image_status: imageOk ? 'ok' : 'retry',\n    image_bytes: bytes,\n    image_file_name: image?.fileName || '',\n    image_file_size: image?.fileSize || '',\n  },\n  binary: $binary,\n};"
       },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        63104,
+        -8304
+      ],
+      "id": "76c00002-eb87-46e1-ae12-cfac014a03fe",
+      "name": "Check Image Output"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{$json.gemini_image_model}}"
+        },
+        "prompt": "={{$json.still_image_prompt}}",
+        "options": {
+          "binaryPropertyOutput": "image"
+        }
+      },
+      "id": "7659357f-6985-4f14-8ddf-b28eb79bfb8b",
+      "name": "Gemini Still Image Retry",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        63536,
+        -7984
+      ],
+      "typeVersion": 1.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "64e60b8a-4277-46a5-8a60-8459eb6ccb28",
+              "leftValue": "={{ $json.image_status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        63424,
+        -8304
+      ],
+      "id": "1c57a037-fcdf-49b9-84c6-502d116eb2ea",
+      "name": "Image OK?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "throw new Error(`Image generation failed after retry for scene ${$json.scene_number}`); "
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64448,
+        -7968
+      ],
+      "id": "0f236406-ed45-423b-ba10-6c1dda8aa2d2",
+      "name": "Fail Image Scene"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "64e60b8a-4277-46a5-8a60-8459eb6ccb28",
+              "leftValue": "={{ $json.image_status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        64176,
+        -7984
+      ],
+      "id": "c5c7d917-c1a2-405f-83a4-988cbc900130",
+      "name": "Retry Image OK?"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const scene = $('Expand Scenes').item.json;\n\n/** @type {any} */\nconst binary = $binary ?? {};\nconst image = binary.image;\n\nconst parseFileSize = (value) => {\n  if (typeof value === 'number') return value;\n  if (typeof value !== 'string') return 0;\n\n  const match = value.trim().match(/^([\\d.]+)\\s*(B|bytes|KB|MB|GB|KiB|MiB|GiB)?$/i);\n  if (!match) return 0;\n\n  const amount = Number(match[1]);\n  const unit = (match[2] || 'B').toLowerCase();\n\n  if (unit === 'gb' || unit === 'gib') return Math.round(amount * 1024 * 1024 * 1024);\n  if (unit === 'mb' || unit === 'mib') return Math.round(amount * 1024 * 1024);\n  if (unit === 'kb' || unit === 'kib') return Math.round(amount * 1024);\n  return Math.round(amount);\n};\n\nconst bytes = parseFileSize(image?.fileSize);\nconst imageOk = bytes > 1024;\n\nreturn {\n  json: {\n    ...scene,\n    ...$json,\n    image_ok: imageOk,\n    image_status: imageOk ? 'ok' : 'retry',\n    image_bytes: bytes,\n    image_file_name: image?.fileName || '',\n    image_file_size: image?.fileSize || '',\n  },\n  binary: $binary,\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        63856,
+        -7984
+      ],
+      "id": "3bfefb43-2d2d-4d50-90ac-a95842ce9dd4",
+      "name": "Check Image Output Retry"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "e0e27176-47cf-4772-9453-5ca1187262bc",
+      "name": "Loop Over Scenes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [
+        62464,
+        -8368
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "7adb246d-4491-47d6-a0d3-da720b4ad388",
+      "name": "Wait Before Image Retry",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        63216,
+        -7984
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "ed1d921a-12a6-4370-8dda-6f7a7cfad826"
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "30c9d964-7cb1-4020-a1cd-4c1dec5ac90c",
+      "name": "Wait Before Veo",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        64656,
+        -8304
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "114d5ce3-a371-42df-9b51-5ff8f2e80802"
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "82eea360-b8e5-41b8-8a15-245789af0d0b",
+      "name": "Wait Before Veo Retry",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        65616,
+        -7984
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "62b754f0-d7c1-4cc8-8967-d2618c4c1a05"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const scene = $('Expand Scenes').item.json;\n\n/** @type {any} */\nconst binary = $binary ?? {};\nconst video = binary.video;\n\nconst parseFileSize = (value) => {\n  if (typeof value === 'number') return value;\n  if (typeof value !== 'string') return 0;\n\n  const match = value.trim().match(/^([\\d.]+)\\s*(B|bytes|KB|MB|GB|KiB|MiB|GiB)?$/i);\n  if (!match) return 0;\n\n  const amount = Number(match[1]);\n  const unit = (match[2] || 'B').toLowerCase();\n\n  if (unit === 'gb' || unit === 'gib') return Math.round(amount * 1024 * 1024 * 1024);\n  if (unit === 'mb' || unit === 'mib') return Math.round(amount * 1024 * 1024);\n  if (unit === 'kb' || unit === 'kib') return Math.round(amount * 1024);\n  return Math.round(amount);\n};\n\nconst bytes = parseFileSize(video?.fileSize);\nconst videoOk = bytes > 10240;\n\nreturn {\n  json: {\n    ...scene,\n    ...$json,\n    video_ok: videoOk,\n    video_status: videoOk ? 'ok' : 'retry',\n    video_bytes: bytes,\n    video_file_name: video?.fileName || '',\n    video_file_size: video?.fileSize || '',\n  },\n  binary: $binary,\n};"
+      },
+      "id": "7d034568-d67d-4b4e-9de3-d5bf3a79f103",
+      "name": "Check Video Output",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        65296,
+        -8304
+      ],
       "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const scene = $('Expand Scenes').item.json;\n\n/** @type {any} */\nconst binary = $binary ?? {};\nconst video = binary.video;\n\nconst parseFileSize = (value) => {\n  if (typeof value === 'number') return value;\n  if (typeof value !== 'string') return 0;\n\n  const match = value.trim().match(/^([\\d.]+)\\s*(B|bytes|KB|MB|GB|KiB|MiB|GiB)?$/i);\n  if (!match) return 0;\n\n  const amount = Number(match[1]);\n  const unit = (match[2] || 'B').toLowerCase();\n\n  if (unit === 'gb' || unit === 'gib') return Math.round(amount * 1024 * 1024 * 1024);\n  if (unit === 'mb' || unit === 'mib') return Math.round(amount * 1024 * 1024);\n  if (unit === 'kb' || unit === 'kib') return Math.round(amount * 1024);\n  return Math.round(amount);\n};\n\nconst bytes = parseFileSize(video?.fileSize);\nconst videoOk = bytes > 10240;\n\nreturn {\n  json: {\n    ...scene,\n    ...$json,\n    video_ok: videoOk,\n    video_status: videoOk ? 'ok' : 'retry',\n    video_bytes: bytes,\n    video_file_name: video?.fileName || '',\n    video_file_size: video?.fileSize || '',\n  },\n  binary: $binary,\n};"
+      },
+      "id": "a8cc5048-31fd-4a1f-8078-b3415a9d8aae",
+      "name": "Check Video Output Retry",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        66256,
+        -7984
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "655ffb1a-e594-4657-8464-eb3f6d7693f7",
+              "leftValue": "={{ $json.video_status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a9d09ffd-ea10-4caa-a228-495450b144e1",
+      "name": "Video OK?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        65616,
+        -8304
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a5a9ef60-6978-4c4f-a671-5887b7f5c1cd",
+              "leftValue": "={{ $json.video_status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "734b7382-951b-470e-b069-6ebf9cdf28aa",
+      "name": "Retry Video OK?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        66576,
+        -7984
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "throw new Error(`Video generation failed after retry for scene ${$json.scene_number}`);"
+      },
+      "id": "32d43c71-6d7c-4ebb-bf45-fa6cfa6aa319",
+      "name": "Fail Video Scene",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        66896,
+        -7744
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "modelId": {
+          "__rl": true,
+          "value": "={{$('Expand Scenes').item.json.veo_model}}",
+          "mode": "id"
+        },
+        "prompt": "={{$('Expand Scenes').item.json.scene_video_prompt}}",
+        "options": {
+          "sampleCount": 1,
+          "durationSeconds": "={{$('Expand Scenes').item.json.scene_video_duration_seconds}}",
+          "aspectRatio": "9:16",
+          "binaryPropertyOutput": "video"
+        }
+      },
+      "id": "ebddd111-4dd9-41f1-a130-48b73abd8b88",
+      "name": "Veo Lite Hook Clip Retry",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "position": [
+        65936,
+        -7984
+      ],
+      "typeVersion": 1.1,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "8tD624WeRp25wyJ2",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## 1. 수집 / 승인\n- 채널 영상 수집, 중복 제거, 아이디어 초안 생성\n- 텔레그램 승인 메시지 발송 및 메시지 ID 저장\n- 승인/보류/거절 콜백 반영\n- `Approval Is Approve?`가 `approved`일 때만 제작 브랜치로 이동",
+        "height": 696,
+        "width": 3640,
+        "color": 5
+      },
+      "id": "3223c348-34c1-4e69-bac3-0d20299da6d4",
+      "name": "메모 · 수집/승인",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        57008,
+        -10400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. 승인 후 제작 준비\n- `Build Production Input`: job_id, scene_count, model, bucket 준비\n- `Gemini Scenario Planner`: 장면별 프롬프트 생성\n- `Parse Scenario`: Gemini 응답 JSON 정리\n- 오디오/BGM/자막 생성 후 `Expand Scenes`에서 scene별 item으로 펼침",
+        "height": 1120,
+        "width": 5056,
+        "color": 4
+      },
+      "id": "56a7363f-a322-46c9-92cf-b1bf50ebb8f5",
+      "name": "메모 · 승인 후 제작 준비",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        56992,
+        -9248
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. 장면별 이미지 생성\n- `Loop Over Scenes`는 scene를 1개씩 처리\n- 이미지 생성 후 파일 크기로 성공 여부 확인\n- 실패 시 8초 대기 후 1회 재시도\n- 재시도 실패 시 즉시 중단",
+        "height": 912,
+        "width": 2248,
+        "color": 6
+      },
+      "id": "83211e4d-3459-4712-8a6f-8ed6848e84ec",
+      "name": "메모 · 장면별 이미지",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        62368,
+        -8512
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. 장면별 영상 생성\n- 이미지 업로드 후 8초 대기\n- Veo는 `Expand Scenes` 기준 모델/프롬프트/길이 참조\n- 파일 크기로 성공 여부 확인\n- 실패 시 8초 대기 후 1회 재시도",
+        "height": 912,
+        "width": 2456,
+        "color": 7
+      },
+      "id": "013bb78b-21d8-4257-89b4-086bdac81e28",
+      "name": "메모 · 장면별 영상",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        64640,
+        -8512
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. 렌더 / 업로드\n- 모든 scene 완료 후 manifest 생성\n- render job 요청 후 30초 간격 polling\n- 완료되면 최종 영상 다운로드 및 YouTube 업로드\n- 실패 상태면 에러 종료",
+        "height": 640,
+        "width": 3216,
+        "color": 3
+      },
+      "id": "6f5b1749-e7a6-4585-b2a7-7bbbae8b89f6",
+      "name": "메모 · 렌더/업로드",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        67184,
+        -8560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · Loop Over Scenes\n- `Batch Size = 1`\n- scene를 한 번에 하나씩 처리\n- 위 라인은 `done`, 아래 라인이 현재 scene 처리",
+        "height": 240,
+        "width": 540,
+        "color": 4
+      },
+      "id": "027c61c1-8450-499d-ab1a-d437df04ebb6",
+      "name": "설정 · Loop Over Scenes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        62368,
+        -7264
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · 이미지 노드\n- `Prompt`:\n  `={{$json.still_image_prompt}}`\n- `Binary Property Output`:\n  `image`",
+        "height": 280,
+        "width": 560,
+        "color": 6
+      },
+      "id": "25456006-2afa-4de3-b9ca-dae4f413feeb",
+      "name": "설정 · 이미지 노드",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        62368,
+        -7568
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · 이미지 판정\n- `Left Value`: `={{ $json.image_status }}`\n- `Operator`: `String -> equals`\n- `Right Value`: `ok`",
+        "height": 280,
+        "width": 560,
+        "color": 6
+      },
+      "id": "37a072f2-bdcf-4c79-9ab9-1113289941bc",
+      "name": "설정 · 이미지 판정",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        62960,
+        -7568
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · Veo 노드\n- `Model`: `={{$('Expand Scenes').item.json.veo_model}}`\n- `Prompt`: `={{$('Expand Scenes').item.json.scene_video_prompt}}`\n- `durationSeconds`: `={{$('Expand Scenes').item.json.scene_video_duration_seconds}}`",
+        "height": 340,
+        "width": 680,
+        "color": 7
+      },
+      "id": "c00aec8b-5717-40ed-bb4a-94568190a99e",
+      "name": "설정 · Veo 노드",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        64640,
+        -7584
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · Veo 판정\n- `Left Value`: `={{ $json.video_status }}`\n- `Operator`: `String -> equals`\n- `Right Value`: `ok`\n- false면 retry 라인으로 연결",
+        "height": 300,
+        "width": 600,
+        "color": 7
+      },
+      "id": "5ad1940d-c75f-4e89-9fbd-c5bab92719bb",
+      "name": "설정 · Veo 판정",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        65328,
+        -7584
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 설정 · Render 요청\n- `Specify Body = JSON`\n- `JSON Body`는 객체 직접 입력 대신\n  `={{ JSON.stringify({ ... }) }}` 사용",
+        "height": 260,
+        "width": 560,
+        "color": 3
+      },
+      "id": "ea55b859-7b1a-48f5-a0d9-f013b1f0a329",
+      "name": "설정 · Render 요청",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        67184,
+        -7904
+      ]
     }
   ],
-  "pinData": {},
   "connections": {
     "Scheduled Daily Trigger": {
       "main": [
@@ -1241,7 +2668,7 @@
       "main": [
         [
           {
-            "node": "Append New Videos to source_videos",
+            "node": "Sort Fresh Candidates",
             "type": "main",
             "index": 0
           }
@@ -1274,16 +2701,15 @@
       "main": [
         [
           {
+            "node": "Update Source Video Status To Idea Created",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Save Draft Idea",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Save Draft Idea": {
-      "main": [
-        [
+          },
           {
             "node": "Format Telegram Approval",
             "type": "main",
@@ -1388,8 +2814,7 @@
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Build Production Input": {
@@ -1418,7 +2843,7 @@
       "main": [
         [
           {
-            "node": "Typecast Narration",
+            "node": "Build BGM Prompt",
             "type": "main",
             "index": 0
           }
@@ -1462,18 +2887,7 @@
       "main": [
         [
           {
-            "node": "Gemini Still Image",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Still Image": {
-      "main": [
-        [
-          {
-            "node": "Upload Image to S3",
+            "node": "Expand Scenes",
             "type": "main",
             "index": 0
           }
@@ -1484,7 +2898,7 @@
       "main": [
         [
           {
-            "node": "Veo Lite Hook Clip",
+            "node": "Wait Before Veo",
             "type": "main",
             "index": 0
           }
@@ -1495,7 +2909,7 @@
       "main": [
         [
           {
-            "node": "Upload Hook Video to S3",
+            "node": "Check Video Output",
             "type": "main",
             "index": 0
           }
@@ -1506,7 +2920,7 @@
       "main": [
         [
           {
-            "node": "Prepare Render Manifest",
+            "node": "Loop Over Scenes",
             "type": "main",
             "index": 0
           }
@@ -1636,12 +3050,299 @@
           }
         ]
       ]
+    },
+    "Build BGM Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate BGM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate BGM": {
+      "main": [
+        [
+          {
+            "node": "Extract BGM Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract BGM Audio": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a file": {
+      "main": [
+        [
+          {
+            "node": "Typecast Narration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Still Image": {
+      "main": [
+        [
+          {
+            "node": "Check Image Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort Fresh Candidates": {
+      "main": [
+        [
+          {
+            "node": "Pick First Fresh Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick First Fresh Candidate": {
+      "main": [
+        [
+          {
+            "node": "Append New Videos to source_videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Scenes": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Image Output": {
+      "main": [
+        [
+          {
+            "node": "Image OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Still Image Retry": {
+      "main": [
+        [
+          {
+            "node": "Check Image Output Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image OK?": {
+      "main": [
+        [
+          {
+            "node": "Upload Image to S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Image Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Image OK?": {
+      "main": [
+        [
+          {
+            "node": "Upload Image to S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Image Scene",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Image Output Retry": {
+      "main": [
+        [
+          {
+            "node": "Retry Image OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Scenes": {
+      "main": [
+        [
+          {
+            "node": "Prepare Render Manifest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Still Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Image Retry": {
+      "main": [
+        [
+          {
+            "node": "Gemini Still Image Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Veo": {
+      "main": [
+        [
+          {
+            "node": "Veo Lite Hook Clip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Before Veo Retry": {
+      "main": [
+        [
+          {
+            "node": "Veo Lite Hook Clip Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Video Output": {
+      "main": [
+        [
+          {
+            "node": "Video OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Video Output Retry": {
+      "main": [
+        [
+          {
+            "node": "Retry Video OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Video OK?": {
+      "main": [
+        [
+          {
+            "node": "Upload Hook Video to S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Before Veo Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Video OK?": {
+      "main": [
+        [
+          {
+            "node": "Upload Hook Video to S3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Video Scene",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Lite Hook Clip Retry": {
+      "main": [
+        [
+          {
+            "node": "Check Video Output Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "notes": "Single import workflow combining channel research, Telegram approval, and approved-only Shorts production.",
-  "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "versionId": "9b965dfd-6b9a-48f8-a503-981961944790"
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b947b3fd6616f3e11fb5bdfba249d2eca4e5892b1ce343f34af74b6147510db5"
+  }
 }
